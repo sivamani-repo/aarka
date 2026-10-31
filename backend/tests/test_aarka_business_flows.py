@@ -286,3 +286,20 @@ def test_dashboard_summary_metrics(auth_headers):
     assert data["financials"]["total_revenue"] > 0
     assert len(data["charts"]["revenue_trend"]) > 0
     assert len(data["charts"]["funnel"]) > 0
+
+
+def test_dashboard_period_filters(auth_headers):
+    results = {}
+    for period in ("today", "week", "month", "all"):
+        response = client.get(f"/api/dashboard/summary?period={period}", headers=auth_headers)
+        assert response.status_code == 200
+        results[period] = response.json()
+        assert results[period]["period"] == period
+
+    all_customers = results["all"]["metrics"]["total_customers"]
+    assert results["today"]["metrics"]["total_customers"] <= all_customers
+    assert results["week"]["metrics"]["total_customers"] <= all_customers
+    assert results["month"]["metrics"]["total_customers"] <= all_customers
+    assert results["today"]["metrics"]["total_customers"] <= results["week"]["metrics"]["total_customers"]
+    assert results["today"]["metrics"]["total_customers"] <= results["month"]["metrics"]["total_customers"]
+    assert len(results["today"]["charts"]["revenue_trend"]) == 1

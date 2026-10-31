@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Users,
   UserCheck,
@@ -36,21 +36,38 @@ import { StatCard } from '../../components/common/StatCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
 
 const PIE_COLORS = ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#d97706', '#ef4444'];
+const DASHBOARD_PERIODS = [
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This week' },
+  { value: 'month', label: 'This month' },
+  { value: 'all', label: 'All time' },
+];
 
 export const DashboardPage = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
+  const [loadError, setLoadError] = useState('');
+  const latestRequest = useRef(0);
 
   const fetchDashboard = async (selectedPeriod) => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
+    setLoadError('');
     try {
       const res = await dashboardAPI.getSummary(selectedPeriod);
-      setData(res.data);
+      if (requestId === latestRequest.current) {
+        setData(res.data);
+      }
     } catch (err) {
       console.error('Failed to load dashboard data:', err);
+      if (requestId === latestRequest.current) {
+        setLoadError('Could not update dashboard data. Please try again.');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -84,29 +101,35 @@ export const DashboardPage = () => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '3px', display: 'flex' }}>
-            {['today', 'week', 'month', 'all'].map((p) => (
+            {DASHBOARD_PERIODS.map(({ value, label }) => (
               <button
-                key={p}
+                key={value}
                 className="btn btn-sm"
                 style={{
-                  backgroundColor: period === p ? 'var(--color-primary-700)' : 'transparent',
-                  color: period === p ? '#ffffff' : 'var(--text-muted)',
+                  backgroundColor: period === value ? 'var(--color-primary-700)' : 'transparent',
+                  color: period === value ? '#ffffff' : 'var(--text-muted)',
                   border: 'none',
-                  textTransform: 'capitalize',
                   padding: '5px 12px',
                 }}
-                onClick={() => setPeriod(p)}
+                onClick={() => setPeriod(value)}
+                aria-pressed={period === value}
               >
-                {p === 'all' ? 'All Time' : `This ${p}`}
+                {label}
               </button>
             ))}
           </div>
 
-          <button className="btn btn-secondary btn-sm" onClick={() => fetchDashboard(period)} title="Refresh Data">
+          <button className="btn btn-secondary btn-sm" onClick={() => fetchDashboard(period)} title="Refresh Data" disabled={loading}>
             <RefreshCw size={14} /> Refresh
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div role="alert" className="alert alert-danger" style={{ marginBottom: '16px' }}>
+          {loadError}
+        </div>
+      )}
 
       {/* Financial Overview Banner */}
       <div
@@ -194,8 +217,10 @@ export const DashboardPage = () => {
         <div className="aarka-card">
           <div className="aarka-card-header">
             <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Monthly Revenue & Installation Throughput</h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Historical revenue trend against completed rooftop installations</p>
+              <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Revenue & Installation Activity</h3>
+              <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Orders and installations created during {DASHBOARD_PERIODS.find((option) => option.value === period)?.label.toLowerCase()}.
+              </p>
             </div>
           </div>
           <div className="aarka-card-body" style={{ height: '300px' }}>
