@@ -6,10 +6,16 @@
 __pycache__/
 *.pyc
 .venv/
+.pytest_cache/
 
 # Frontend
 node_modules/
 dist/
+
+# Uploads and temporary
+backend/uploads/
+uploads/
+*.log
 
 # macOS
 .DS_Store
