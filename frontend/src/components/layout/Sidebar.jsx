@@ -177,20 +177,9 @@ export const Sidebar = () => {
                   key={itemIdx}
                   to={item.path}
                   end={item.path === '/'}
-                  style={({ isActive }) => ({
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '8px 12px',
-                    borderRadius: '8px',
-                    fontSize: '13px',
-                    fontWeight: isActive ? '600' : '500',
-                    color: isActive ? '#ffffff' : '#b2cec0',
-                    backgroundColor: isActive ? '#1c4a34' : 'transparent',
-                    textDecoration: 'none',
-                    marginBottom: '2px',
-                    transition: 'all 0.15s ease',
-                  })}
+                  className={({ isActive }) =>
+                    `sidebar-nav-link${isActive ? ' is-active' : ''}`
+                  }
                 >
                   <Icon size={16} />
                   <span>{item.name}</span>
@@ -213,16 +202,8 @@ export const Sidebar = () => {
           href="/enquiry"
           target="_blank"
           rel="noreferrer"
+          className="sidebar-portal-link"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: '8px 12px',
-            backgroundColor: '#153826',
-            borderRadius: '8px',
-            color: '#a7e4c2',
-            fontSize: '12px',
-            fontWeight: '600',
             marginBottom: '10px',
           }}
         >
