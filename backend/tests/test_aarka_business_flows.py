@@ -1,4 +1,5 @@
 import pytest
+import random
 from fastapi.testclient import TestClient
 from main import app
 from app.database import SessionLocal
@@ -206,8 +207,14 @@ def test_dispatch_and_automatic_warranty_activation(auth_headers):
     fail_disp = client.post("/api/dispatches", json={"order_id": order_id, "serial_numbers": []}, headers=auth_headers)
     assert fail_disp.status_code == 400
 
-    # Find an available serial number
+    # Find an available serial number or create one if exhausted
     avail_serials = client.get("/api/serials?status=AVAILABLE", headers=auth_headers).json()
+    if not avail_serials:
+        prods = client.get("/api/products?requires_serial=true", headers=auth_headers).json()
+        prod_id = prods[0]["id"]
+        sn_unique = f"INV-TEST-DISP-{random.randint(100000, 999999)}"
+        client.post("/api/serials", json={"product_id": prod_id, "serial_number": sn_unique}, headers=auth_headers)
+        avail_serials = client.get("/api/serials?status=AVAILABLE", headers=auth_headers).json()
     assert len(avail_serials) > 0, "No available serial found"
     active_sn = avail_serials[0]["serial_number"]
 

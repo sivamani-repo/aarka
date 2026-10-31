@@ -8,7 +8,10 @@ from app.models.inventory import Supplier, InventoryItem, StockMovement, Dispatc
 from app.models.installation import InstallationJob
 from app.models.service import WarrantyRecord, WarrantyClaim, ServiceTicket
 from app.models.finance import ProjectExpense, Invoice
-from app.models.subsidy import SubsidyApplication
+from app.models.subsidy import (
+    SubsidyApplication, GovernmentScheme, SchemeRule,
+    SubsidyAssessment, SubsidyDocument, VerificationRecord, SubsidyStatusHistory
+)
 
 __all__ = [
     "Base",
@@ -38,5 +41,11 @@ __all__ = [
     "ProjectExpense",
     "Invoice",
     "SubsidyApplication",
+    "GovernmentScheme",
+    "SchemeRule",
+    "SubsidyAssessment",
+    "SubsidyDocument",
+    "VerificationRecord",
+    "SubsidyStatusHistory",
 ]
 

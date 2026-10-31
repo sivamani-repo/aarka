@@ -1099,6 +1099,8 @@ class SubsidyOut(BaseModel):
     order_id: Optional[int] = None
     order_number: Optional[str] = None
     scheme_name: str
+    scheme_id: Optional[int] = None
+    assessment_id: Optional[int] = None
     installation_id: Optional[int] = None
     category: Optional[str] = "RESIDENTIAL"
     state: Optional[str] = "Telangana"
@@ -1109,15 +1111,21 @@ class SubsidyOut(BaseModel):
     submission_date: Optional[date] = None
     inspection_date: Optional[date] = None
     approval_date: Optional[date] = None
+    commissioning_date: Optional[date] = None
     disbursement_date: Optional[date] = None
+    internal_status: Optional[str] = "DRAFT"
     verification_status: str
+    official_status: Optional[str] = "NOT_SUBMITTED"
     approval_status: str
+    estimated_amount: Optional[float] = 78000.0
+    requested_amount: Optional[float] = 78000.0
     subsidy_amount: float
     approved_amount: Optional[float] = 0.0
     disbursed_amount: Optional[float] = 0.0
     disbursement_reference: Optional[str] = None
     payment_status: str
     assigned_officer: Optional[str] = None
+    assigned_employee_id: Optional[int] = None
     eligibility_notes: Optional[str] = None
     documents: str
     remarks: Optional[str] = None
@@ -1126,3 +1134,166 @@ class SubsidyOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SchemeRuleOut(BaseModel):
+    id: int
+    scheme_id: int
+    customer_category: str
+    state: str
+    capacity_min: float
+    capacity_max: float
+    rate_per_kw: float
+    maximum_assistance: float
+    calculation_type: str
+    rule_version: str
+    eligibility_configuration: str
+    document_checklist_configuration: str
+    effective_from: date
+    effective_until: Optional[date] = None
+
+    class Config:
+        from_attributes = True
+
+
+class GovernmentSchemeOut(BaseModel):
+    id: int
+    code: str
+    name: str
+    authority: str
+    category: str
+    jurisdiction: str
+    state: Optional[str] = None
+    description: str
+    source_url: str
+    notification_reference: Optional[str] = None
+    effective_from: date
+    effective_until: Optional[date] = None
+    last_verified_at: date
+    verification_status: str
+    is_active: bool
+    rules: List[SchemeRuleOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class SubsidyAssessmentCreate(BaseModel):
+    customer_id: Optional[int] = None
+    applicant_name: Optional[str] = None
+    applicant_phone: Optional[str] = None
+    applicant_email: Optional[str] = None
+    order_id: Optional[int] = None
+    scheme_code: str = "PM_SURYA_GHAR_RES"
+    state: str = "Telangana"
+    district: Optional[str] = None
+    customer_category: str = "RESIDENTIAL"
+    proposed_capacity: float = 3.0
+    discom_name: str = "TSSPDCL"
+    consumer_number: str
+    tariff_category: Optional[str] = "LT-1 Residential"
+    sanctioned_load_kw: Optional[float] = 3.0
+    monthly_consumption_units: Optional[float] = 250.0
+    roof_type: Optional[str] = "RCC Flat Concrete"
+    available_roof_area_sqft: Optional[float] = 300.0
+    has_roof_rights: bool = True
+    is_grid_connected: bool = True
+    prior_subsidy_claimed: bool = False
+    scheme_specific_data: Optional[Dict[str, Any]] = None
+
+
+class SubsidyAssessmentOut(BaseModel):
+    id: int
+    customer_id: Optional[int] = None
+    applicant_name: Optional[str] = None
+    applicant_phone: Optional[str] = None
+    applicant_email: Optional[str] = None
+    scheme_code: Optional[str] = None
+    state: str
+    customer_category: str
+    proposed_capacity: float
+    discom_name: Optional[str] = None
+    consumer_number: Optional[str] = None
+    rule_version: str
+    estimated_central_assistance: float
+    estimated_state_assistance: float
+    estimated_total_assistance: float
+    estimated_project_cost: float
+    estimated_customer_outlay: float
+    eligibility_status: str
+    calculation_breakdown: str
+    disclaimer_acknowledged: bool
+    assessment_date: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SubsidyDocumentOut(BaseModel):
+    id: int
+    application_id: int
+    document_type: str
+    storage_path: str
+    original_filename: str
+    file_size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None
+    uploaded_by: str
+    review_status: str
+    reviewed_by: Optional[str] = None
+    reviewed_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
+    version_number: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SubsidyDocumentReviewRequest(BaseModel):
+    decision: str  # VERIFIED | REJECTED | CORRECTION_REQUESTED
+    remarks: Optional[str] = None
+
+
+class VerificationRecordOut(BaseModel):
+    id: int
+    application_id: int
+    document_id: Optional[int] = None
+    reviewer_name: str
+    verification_type: str
+    decision: str
+    remarks: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SubsidyStatusHistoryOut(BaseModel):
+    id: int
+    application_id: int
+    previous_status: Optional[str] = None
+    new_status: str
+    status_type: str
+    updated_by: str
+    actor_type: str
+    evidence_reference: Optional[str] = None
+    remarks: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class SubsidyOfficialStatusUpdateRequest(BaseModel):
+    official_status: str  # NOT_SUBMITTED | SUBMITTED | FEASIBILITY_PENDING | FEASIBILITY_APPROVED | FEASIBILITY_REJECTED | INSPECTION_PENDING | COMMISSIONED | SUBSIDY_CLAIM_PENDING | APPROVED | REJECTED | DISBURSED
+    portal_application_ref: Optional[str] = None
+    evidence_reference: Optional[str] = None
+    remarks: Optional[str] = None
+    inspection_date: Optional[date] = None
+    commissioning_date: Optional[date] = None
+    approval_date: Optional[date] = None
+    disbursement_date: Optional[date] = None
+    approved_amount: Optional[float] = None
+    disbursed_amount: Optional[float] = None
+    disbursement_reference: Optional[str] = None

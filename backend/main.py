@@ -81,6 +81,19 @@ app.include_router(dashboard.router)
 app.include_router(uploads.router)
 
 
+@app.on_event("startup")
+def on_startup():
+    from app.database import SessionLocal
+    from app.core.subsidy_seed import seed_government_schemes_and_rules
+    db = SessionLocal()
+    try:
+        seed_government_schemes_and_rules(db)
+    except Exception as e:
+        print(f"Warning during subsidy scheme seeding: {e}")
+    finally:
+        db.close()
+
+
 @app.get("/")
 def home():
     return {
