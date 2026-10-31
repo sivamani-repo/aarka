@@ -93,13 +93,12 @@ export const Sidebar = () => {
 
   return (
     <aside
+      className="app-sidebar"
       style={{
-        width: '260px',
         backgroundColor: '#0c2318', // Deep forest green
         color: '#e2ede7',
         display: 'flex',
         flexDirection: 'column',
-        height: '100vh',
         borderRight: '1px solid #163827',
         flexShrink: 0,
         userSelect: 'none',

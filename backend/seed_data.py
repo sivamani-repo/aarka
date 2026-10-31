@@ -45,7 +45,8 @@ def seed():
                 password_hash=default_pwd_hash,
                 role=role,
                 phone=phone,
-                is_active=True
+                is_active=True,
+                is_verified=True
             )
             db.add(user)
         db.commit()
