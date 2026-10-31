@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { SunMedium, Lock, Mail, ArrowRight, AlertCircle, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import GoogleSignInButton from '../../components/common/GoogleSignInButton';
+import AuthShell from '../../components/auth/AuthShell';
 
 export const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -69,16 +70,7 @@ export const LoginPage = () => {
   };
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        backgroundColor: '#f6f7f4',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-      }}
-    >
+    <AuthShell mode="login">
       <div
         className="aarka-card"
         style={{
@@ -282,13 +274,14 @@ export const LoginPage = () => {
           Don't have an account?{' '}
           <Link
             to="/register"
+            state={{ authSwitch: true }}
             style={{ color: 'var(--color-primary-700)', fontWeight: '600', textDecoration: 'none' }}
           >
             Create an Account
           </Link>
         </div>
       </div>
-    </div>
+    </AuthShell>
   );
 };
 

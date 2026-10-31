@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { SunMedium, Lock, Mail, User, Phone, ArrowRight, AlertCircle, Eye, EyeOff, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import GoogleSignInButton from '../../components/common/GoogleSignInButton';
+import AuthShell from '../../components/auth/AuthShell';
 
 export const RegisterPage = () => {
   const [formData, setFormData] = useState({
@@ -77,16 +78,7 @@ export const RegisterPage = () => {
   // State: Verification Email Sent Screen
   if (registeredEmail) {
     return (
-      <div
-        style={{
-          minHeight: '100vh',
-          backgroundColor: '#f6f7f4',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '24px',
-        }}
-      >
+      <AuthShell mode="register">
         <div
           className="aarka-card"
           style={{
@@ -138,25 +130,21 @@ export const RegisterPage = () => {
             💡 <strong>Next Steps:</strong> Check your inbox (and spam folder). The link is valid for 24 hours. Once verified, you can sign in directly.
           </div>
 
-          <Link to="/login" className="btn btn-primary" style={{ width: '100%', textDecoration: 'none' }}>
+          <Link
+            to="/login"
+            state={{ authSwitch: true }}
+            className="btn btn-primary"
+            style={{ width: '100%', textDecoration: 'none' }}
+          >
             Return to Sign In
           </Link>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        backgroundColor: '#f6f7f4',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '24px',
-      }}
-    >
+    <AuthShell mode="register">
       <div
         className="aarka-card"
         style={{
@@ -379,15 +367,15 @@ export const RegisterPage = () => {
           Already have an account?{' '}
           <Link
             to="/login"
+            state={{ authSwitch: true }}
             style={{ color: 'var(--color-primary-700)', fontWeight: '600', textDecoration: 'none' }}
           >
             Sign In
           </Link>
         </div>
       </div>
-    </div>
+    </AuthShell>
   );
 };
 
 export default RegisterPage;
-
