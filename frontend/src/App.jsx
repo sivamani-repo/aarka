@@ -35,6 +35,7 @@ import SubsidiesPage from './pages/subsidies/SubsidiesPage';
 import ReportsPage from './pages/reports/ReportsPage';
 import TeamPage from './pages/team/TeamPage';
 import SettingsPage from './pages/settings/SettingsPage';
+import CompanyProfilePage from './pages/company/CompanyProfilePage';
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -80,6 +81,7 @@ export default function App() {
                     }
                 >
                     <Route index element={<Navigate to="/dashboard" replace />} />
+                    <Route path="company-profile" element={<CompanyProfilePage />} />
                     <Route path="dashboard" element={<DashboardPage />} />
                     <Route path="leads" element={<LeadsPage />} />
                     <Route path="customers" element={<CustomersPage />} />

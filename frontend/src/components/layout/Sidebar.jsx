@@ -104,15 +104,12 @@ export const Sidebar = () => {
         userSelect: 'none',
       }}
     >
-      {/* Brand Header */}
-      <div
-        style={{
-          padding: '20px 20px 16px',
-          borderBottom: '1px solid #163827',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-        }}
+      <NavLink
+        to="/company-profile"
+        className={({ isActive }) =>
+          `sidebar-brand-link${isActive ? ' is-active' : ''}`
+        }
+        aria-label="AARKA company profile"
       >
         <div
           style={{
@@ -146,7 +143,7 @@ export const Sidebar = () => {
             Solar Operations, Simplified.
           </div>
         </div>
-      </div>
+      </NavLink>
 
       {/* Navigation List */}
       <div
