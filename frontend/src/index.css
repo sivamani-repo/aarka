@@ -1087,411 +1087,399 @@ a:focus:not(:focus-visible) {
 
 
 /* =========================================================
-   AARKA — GOVERNMENT SUBSIDIES & GOVERNANCE MODULE
-   Enterprise Fintech & National Portal Design System
+
+/* =========================================================
+   AARKA — GOVERNMENT SUBSIDIES MODULE
+   Consolidated, responsive styles using the existing brand tokens.
+   This section intentionally avoids changing application behavior.
 ========================================================= */
 
-/* Hero Header Banner */
-div:has(> div > div > h1:is(:contains("Government Solar Subsidies"))),
+/* Module hero. The class fragment targets the existing dark-green hero. */
 [class*="from-[#071b12]"][class*="to-[#143e2b]"] {
-  background: linear-gradient(135deg, #071b12 0%, #0b2519 45%, #143e2b 100%) !important;
-  border: 1px solid rgba(46, 139, 96, 0.28) !important;
-  box-shadow: 0 16px 36px -8px rgba(7, 27, 18, 0.22), 0 4px 12px -2px rgba(7, 27, 18, 0.1) !important;
-  border-radius: var(--radius-2xl, 24px) !important;
   position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  border: 1px solid rgba(46, 139, 96, 0.26) !important;
+  border-radius: var(--radius-2xl, 26px) !important;
+  background: linear-gradient(135deg, #071b12 0%, #0b2519 52%, #174b34 100%) !important;
+  box-shadow: 0 16px 36px rgba(7, 27, 18, 0.14),
+    0 3px 10px rgba(7, 27, 18, 0.07) !important;
 }
 
 [class*="from-[#071b12]"] h1 {
-  font-family: var(--font-display, inherit);
-  letter-spacing: -0.025em;
+  color: #fff;
+  font-family: var(--font-display, var(--font-sans, sans-serif));
+  font-size: clamp(1.45rem, 2.3vw, 2rem);
   font-weight: 800;
-  line-height: 1.2;
+  letter-spacing: -0.035em;
+  line-height: 1.18;
 }
 
 [class*="from-[#071b12]"] p {
-  color: #cbd5e1;
-  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.65;
 }
 
-/* Hero Quick Policy Badges */
-[class*="from-[#071b12]"] .flex-wrap.items-center.gap-2 > span {
-  background: rgba(255, 255, 255, 0.09) !important;
-  border: 1px solid rgba(255, 255, 255, 0.16) !important;
-  border-radius: 9px !important;
-  font-weight: 600 !important;
-  font-size: 11.5px !important;
-  letter-spacing: 0.01em;
-  transition: background var(--transition-fast, 150ms ease), border-color var(--transition-fast, 150ms ease), transform var(--transition-fast, 150ms ease);
-}
-
-[class*="from-[#071b12]"] .flex-wrap.items-center.gap-2 > span:hover {
-  background: rgba(255, 255, 255, 0.16) !important;
-  border-color: rgba(255, 255, 255, 0.3) !important;
-  transform: translateY(-1px);
-}
-
-/* Hero Primary Buttons */
-[class*="from-[#071b12]"] button[class*="from-emerald-500"] {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-  border: 1px solid rgba(255, 255, 255, 0.25) !important;
-  box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35) !important;
-  font-weight: 700 !important;
+[class*="from-[#071b12]"] .flex-wrap.items-center.gap-2>span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 10px;
+  color: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.085) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 999px !important;
+  font-size: 11px !important;
+  font-weight: 650 !important;
   letter-spacing: 0.015em;
-  transition: all 180ms ease !important;
+  transition: background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease);
 }
 
-[class*="from-[#071b12]"] button[class*="from-emerald-500"]:hover {
-  background: linear-gradient(135deg, #059669 0%, #047857 100%) !important;
+[class*="from-[#071b12]"] .flex-wrap.items-center.gap-2>span:hover {
+  background: rgba(255, 255, 255, 0.14) !important;
+  border-color: rgba(255, 255, 255, 0.27) !important;
+}
+
+[class*="from-[#071b12]"] button[class*="from-emerald-500"] {
+  min-height: 42px;
+  color: #fff;
+  background: linear-gradient(135deg, #159b69, #08784f) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 11px;
+  box-shadow: 0 4px 12px rgba(5, 150, 105, 0.24) !important;
+  font-weight: 700 !important;
+  transition: transform var(--transition-fast, 150ms ease),
+    box-shadow var(--transition-fast, 150ms ease),
+    background var(--transition-fast, 150ms ease);
+}
+
+[class*="from-[#071b12]"] button[class*="from-emerald-500"]:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0d895b, #066a47) !important;
+  box-shadow: 0 7px 17px rgba(5, 150, 105, 0.3) !important;
   transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(5, 150, 105, 0.45) !important;
 }
 
-/* Navigation Tabs Pill Container */
+/* Horizontal module navigation. */
 .overflow-x-auto.rounded-2xl.border.border-stone-200\/80.bg-stone-100\/70 {
-  background: #f1f3ee !important;
-  border: 1px solid var(--border-color, #e5e9e2) !important;
-  padding: 5px !important;
-  border-radius: 16px !important;
+  display: flex;
+  align-items: center;
   gap: 4px !important;
+  padding: 5px !important;
+  background: #f1f4ef !important;
+  border: 1px solid var(--border-color, #e5e9e2) !important;
+  border-radius: 14px !important;
+  scrollbar-width: thin;
 }
 
 .overflow-x-auto.rounded-2xl.border.border-stone-200\/80.bg-stone-100\/70 button {
-  font-family: var(--font-sans, inherit);
-  letter-spacing: 0.01em;
-  padding: 8px 16px !important;
-  border-radius: 11px !important;
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 8px 14px !important;
+  color: var(--text-muted, #626c65);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 10px !important;
+  font-family: var(--font-sans, sans-serif);
   font-size: 12px !important;
-  font-weight: 600 !important;
-  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+  font-weight: 650 !important;
+  white-space: nowrap;
+  transition: color var(--transition-fast, 150ms ease),
+    background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease),
+    box-shadow var(--transition-fast, 150ms ease);
 }
 
-.overflow-x-auto.rounded-2xl.border.border-stone-200\/80.bg-stone-100\/70 button:hover:not([class*="bg-white"]) {
-  background: #e4e8e1 !important;
-  color: #141c17 !important;
+.overflow-x-auto.rounded-2xl.border.border-stone-200\/80.bg-stone-100\/70 button:hover:not(:disabled):not([class*="bg-white"]) {
+  color: var(--text-main, #141c17) !important;
+  background: #e6ebe4 !important;
 }
 
 .overflow-x-auto.rounded-2xl.border.border-stone-200\/80.bg-stone-100\/70 button[class*="bg-white"] {
-  background: #ffffff !important;
   color: var(--color-primary-900, #0b2519) !important;
-  font-weight: 800 !important;
-  box-shadow: 0 2px 6px rgba(18, 28, 22, 0.06), 0 1px 2px rgba(18, 28, 22, 0.04) !important;
-  border: 1px solid rgba(229, 233, 226, 0.9) !important;
+  background: #fff !important;
+  border: 1px solid #e2e9e1 !important;
+  box-shadow: 0 1px 3px rgba(18, 28, 22, 0.07) !important;
+  font-weight: 750 !important;
 }
 
-/* Overview KPI Stat Cards */
-.grid-cols-1.gap-4.sm\:grid-cols-2.lg\:grid-cols-4 > div {
-  background: #ffffff !important;
-  border: 1px solid var(--border-color, #e5e9e2) !important;
-  border-radius: var(--radius-xl, 20px) !important;
-  padding: 22px 20px !important;
-  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease !important;
-  box-shadow: var(--shadow-xs, 0 1px 2px rgba(18, 28, 22, 0.04)) !important;
+/* Dashboard KPI cards. */
+.grid-cols-1.gap-4.sm\:grid-cols-2.lg\:grid-cols-4>div {
   position: relative;
-}
-
-.grid-cols-1.gap-4.sm\:grid-cols-2.lg\:grid-cols-4 > div:hover {
-  transform: translateY(-2px);
-  border-color: var(--color-primary-300, #78c59f) !important;
-  box-shadow: var(--shadow-md, 0 5px 12px rgba(18, 28, 22, 0.06)) !important;
-}
-
-.grid-cols-1.gap-4.sm\:grid-cols-2.lg\:grid-cols-4 > div .text-2xl {
-  font-family: var(--font-display, inherit) !important;
-  letter-spacing: -0.025em !important;
-  font-weight: 800 !important;
-  color: var(--text-main, #141c17) !important;
-}
-
-/* Charts & Financial Reconciliation Cards */
-.grid-cols-1.gap-6.lg\:grid-cols-2 > div {
+  min-width: 0;
+  padding: 20px !important;
+  background: #fff !important;
+  border: 1px solid var(--border-color, #e5e9e2) !important;
   border-radius: var(--radius-xl, 20px) !important;
-  border: 1px solid var(--border-color, #e5e9e2) !important;
-  background: #ffffff !important;
   box-shadow: var(--shadow-xs, 0 1px 2px rgba(18, 28, 22, 0.04)) !important;
+  transition: border-color var(--transition-normal, 220ms ease),
+    box-shadow var(--transition-normal, 220ms ease),
+    transform var(--transition-normal, 220ms ease);
 }
 
-.grid-cols-1.gap-6.lg\:grid-cols-2 > div h3 {
-  font-size: 14.5px !important;
-  font-weight: 700 !important;
+.grid-cols-1.gap-4.sm\:grid-cols-2.lg\:grid-cols-4>div:hover {
+  border-color: var(--color-primary-200, #a9e0c5) !important;
+  box-shadow: var(--shadow-md, 0 5px 12px rgba(18, 28, 22, 0.06)) !important;
+  transform: translateY(-2px);
+}
+
+.grid-cols-1.gap-4.sm\:grid-cols-2.lg\:grid-cols-4>div .text-2xl {
   color: var(--text-main, #141c17) !important;
+  font-family: var(--font-display, var(--font-sans, sans-serif)) !important;
+  font-size: clamp(1.35rem, 2vw, 1.75rem) !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.035em !important;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Government Scheme Cards */
-.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6 > div {
-  border-radius: var(--radius-2xl, 24px) !important;
+/* Dashboard chart and reconciliation panels. */
+.grid-cols-1.gap-6.lg\:grid-cols-2>div {
+  min-width: 0;
+  overflow: hidden;
+  background: #fff !important;
   border: 1px solid var(--border-color, #e5e9e2) !important;
-  background: #ffffff !important;
-  padding: 24px !important;
-  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease !important;
+  border-radius: var(--radius-xl, 20px) !important;
   box-shadow: var(--shadow-xs, 0 1px 2px rgba(18, 28, 22, 0.04)) !important;
 }
 
-.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6 > div:hover {
-  transform: translateY(-3px);
-  border-color: var(--color-primary-300, #78c59f) !important;
+.grid-cols-1.gap-6.lg\:grid-cols-2>div h3 {
+  color: var(--text-main, #141c17) !important;
+  font-size: 14px !important;
+  font-weight: 750 !important;
+  letter-spacing: -0.01em;
+}
+
+/* Government scheme catalogue cards. */
+.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6>div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  padding: 22px !important;
+  background: #fff !important;
+  border: 1px solid var(--border-color, #e5e9e2) !important;
+  border-radius: var(--radius-xl, 20px) !important;
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(18, 28, 22, 0.04)) !important;
+  transition: border-color var(--transition-normal, 220ms ease),
+    box-shadow var(--transition-normal, 220ms ease),
+    transform var(--transition-normal, 220ms ease);
+}
+
+.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6>div:hover {
+  border-color: var(--color-primary-200, #a9e0c5) !important;
   box-shadow: var(--shadow-lg, 0 12px 24px rgba(18, 28, 22, 0.08)) !important;
+  transform: translateY(-2px);
 }
 
-.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6 > div h3 {
-  font-size: 15.5px !important;
-  font-weight: 700 !important;
-  line-height: 1.35 !important;
+.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6>div h3 {
   color: var(--text-main, #141c17) !important;
+  font-size: 15px !important;
+  font-weight: 750 !important;
+  line-height: 1.4 !important;
+  letter-spacing: -0.015em;
 }
 
-.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6 > div .bg-stone-50\/80 {
-  background: #f8faf7 !important;
-  border: 1px solid #edf1eb !important;
-  border-radius: var(--radius-lg, 16px) !important;
-  padding: 14px 16px !important;
+.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6>div .bg-stone-50\/80 {
+  padding: 13px 14px !important;
+  background: #f7faf6 !important;
+  border: 1px solid #e9efe8 !important;
+  border-radius: var(--radius-lg, 15px) !important;
 }
 
-/* Multi-Step Eligibility Wizard */
+/* Eligibility wizard shell and step content. */
 .rounded-3xl.border.border-stone-200\/80.bg-white.p-6.sm\:p-8 {
-  border-radius: var(--radius-2xl, 24px) !important;
+  background: #fff !important;
   border: 1px solid var(--border-color, #e5e9e2) !important;
+  border-radius: var(--radius-2xl, 26px) !important;
   box-shadow: var(--shadow-sm, 0 1px 3px rgba(18, 28, 22, 0.06)) !important;
 }
 
-/* Category Selection Buttons in Wizard */
-.grid-cols-1.sm\:grid-cols-3.gap-3 > button {
-  border-radius: var(--radius-lg, 16px) !important;
-  padding: 16px !important;
-  transition: all 180ms ease !important;
-  border: 1.5px solid var(--border-color, #e5e9e2) !important;
-  background: #ffffff !important;
+.grid-cols-1.sm\:grid-cols-3.gap-3>button {
+  min-width: 0;
+  padding: 15px !important;
+  background: #fff !important;
+  border: 1px solid var(--border-color, #e5e9e2) !important;
+  border-radius: var(--radius-lg, 15px) !important;
+  text-align: left;
+  transition: background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease),
+    box-shadow var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
 }
 
-.grid-cols-1.sm\:grid-cols-3.gap-3 > button:hover:not([class*="border-emerald-600"]) {
-  border-color: #cbd5e1 !important;
-  background: #f8fafc !important;
+.grid-cols-1.sm\:grid-cols-3.gap-3>button:hover:not(:disabled):not([class*="border-emerald-600"]) {
+  background: #f8faf8 !important;
+  border-color: #cbd8cd !important;
   transform: translateY(-1px);
 }
 
-.grid-cols-1.sm\:grid-cols-3.gap-3 > button[class*="border-emerald-600"] {
-  border-color: var(--color-primary-500, #2e8b60) !important;
+.grid-cols-1.sm\:grid-cols-3.gap-3>button[class*="border-emerald-600"] {
   background: var(--color-primary-50, #effaf4) !important;
-  box-shadow: 0 0 0 1px var(--color-primary-500, #2e8b60), 0 4px 12px rgba(46, 139, 96, 0.08) !important;
-}
-
-/* Form Controls & Dropdown Styling */
-input[type="text"],
-input[type="tel"],
-input[type="number"],
-input[type="search"],
-select,
-textarea {
-  font-family: inherit !important;
-  border-radius: var(--radius-md, 11px) !important;
-  border: 1px solid var(--border-color, #e5e9e2) !important;
-  font-size: 13px !important;
-  color: var(--text-main, #141c17) !important;
-  background-color: #ffffff !important;
-  transition: border-color var(--transition-fast, 150ms ease), box-shadow var(--transition-fast, 150ms ease) !important;
-}
-
-input:hover,
-select:hover,
-textarea:hover {
-  border-color: #cbd5e1 !important;
-}
-
-input:focus,
-select:focus,
-textarea:focus {
   border-color: var(--color-primary-500, #2e8b60) !important;
-  box-shadow: 0 0 0 3px rgba(46, 139, 96, 0.15) !important;
-  outline: none !important;
+  box-shadow: inset 0 0 0 1px var(--color-primary-500, #2e8b60),
+    0 3px 10px rgba(46, 139, 96, 0.07) !important;
 }
 
-/* Subsidy Calculator Slider */
-input[type="range"] {
-  -webkit-appearance: none;
-  appearance: none;
-  background: #e2e8f0 !important;
+/* Subsidy calculator range control. Keep ordinary form controls governed
+   by the global design system so this module does not restyle other pages. */
+.md\:col-span-2 input[type="range"] {
   height: 6px !important;
-  border-radius: var(--radius-full, 9999px) !important;
-  border: none !important;
-}
-
-input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
+  padding: 0 !important;
   appearance: none;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--color-primary-700, #1b4d36);
+  background: #e2e9e3 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-  transition: transform 120ms ease, background 120ms ease;
 }
 
-input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
-  background: var(--color-primary-600, #256b4b);
-}
-
-input[type="range"]::-moz-range-thumb {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
+.md\:col-span-2 input[type="range"]::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  appearance: none;
   background: var(--color-primary-700, #1b4d36);
-  cursor: pointer;
-  border: none;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  cursor: grab;
 }
 
-/* Calculator Financial Metric Boxes */
-.md\:col-span-2 .grid-cols-1.sm\:grid-cols-3.gap-3 > div {
-  border-radius: var(--radius-lg, 16px) !important;
-  padding: 18px 14px !important;
-  transition: transform 160ms ease, box-shadow 160ms ease !important;
+.md\:col-span-2 input[type="range"]::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  background: var(--color-primary-700, #1b4d36);
+  border: 3px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  cursor: grab;
 }
 
-.md\:col-span-2 .grid-cols-1.sm\:grid-cols-3.gap-3 > div:hover {
-  transform: translateY(-2px);
+.md\:col-span-2 .grid-cols-1.sm\:grid-cols-3.gap-3>div {
+  min-width: 0;
+  padding: 16px 14px !important;
+  border-radius: var(--radius-lg, 15px) !important;
+  transition: box-shadow var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
+}
+
+.md\:col-span-2 .grid-cols-1.sm\:grid-cols-3.gap-3>div:hover {
   box-shadow: var(--shadow-sm, 0 1px 3px rgba(18, 28, 22, 0.06)) !important;
+  transform: translateY(-1px);
 }
 
-/* Customer Tracker 12-Stage Visual Stepper */
+/* Application timeline. */
 .relative.pl-6.space-y-6::before {
-  left: 9px !important;
   width: 2px !important;
-  background: #e2e8f0 !important;
+  background: #e1e9e2 !important;
 }
 
-.relative.pl-6.space-y-6 > div span.absolute {
-  left: -24px !important;
-  width: 22px !important;
-  height: 22px !important;
+.relative.pl-6.space-y-6>div span.absolute {
+  width: 21px !important;
+  height: 21px !important;
+  border: 2px solid #fff;
   border-radius: 50% !important;
-  box-shadow: 0 0 0 2px #ffffff !important;
+  box-shadow: 0 0 0 1px #dfe8df !important;
 }
 
-/* Data Table Container in Subsidies */
+/* Subsidy data-table surface. */
 .rounded-3xl.border.border-stone-200\/80.bg-white.overflow-hidden {
-  border-radius: var(--radius-xl, 20px) !important;
+  overflow: hidden;
+  background: #fff !important;
   border: 1px solid var(--border-color, #e5e9e2) !important;
+  border-radius: var(--radius-xl, 20px) !important;
   box-shadow: var(--shadow-xs, 0 1px 2px rgba(18, 28, 22, 0.04)) !important;
 }
 
-/* Modal Inner Surface Refinement */
-.aarka-card {
-  border-radius: var(--radius-2xl, 24px) !important;
-  border: 1px solid var(--border-color, #e5e9e2) !important;
+.rounded-3xl.border.border-stone-200\/80.bg-white.overflow-hidden table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
 }
 
-/* Mobile & Tablet Responsiveness */
+.rounded-3xl.border.border-stone-200\/80.bg-white.overflow-hidden thead {
+  background: #f7f9f6;
+}
+
+.rounded-3xl.border.border-stone-200\/80.bg-white.overflow-hidden th {
+  padding: 12px 15px;
+  color: var(--text-muted, #626c65);
+  border-bottom: 1px solid var(--border-color, #e5e9e2);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.065em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rounded-3xl.border.border-stone-200\/80.bg-white.overflow-hidden td {
+  padding: 13px 15px;
+  border-bottom: 1px solid #edf1ec;
+  vertical-align: middle;
+}
+
+.rounded-3xl.border.border-stone-200\/80.bg-white.overflow-hidden tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.rounded-3xl.border.border-stone-200\/80.bg-white.overflow-hidden tbody tr:hover {
+  background: #f8fbf8;
+}
+
+/* Consistent focus visibility for interactive controls within module
+   patterns already used by the current JSX. */
+[class*="from-[#071b12]"] button:focus-visible,
+.overflow-x-auto.rounded-2xl.border.border-stone-200\/80.bg-stone-100\/70 button:focus-visible,
+.grid-cols-1.sm\:grid-cols-3.gap-3>button:focus-visible {
+  outline: 3px solid rgba(46, 139, 96, 0.35);
+  outline-offset: 2px;
+}
+
+/* Responsive layouts. */
+@media (max-width: 1024px) {
+  .grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6>div {
+    padding: 19px !important;
+  }
+}
+
 @media (max-width: 768px) {
   [class*="from-[#071b12]"][class*="to-[#143e2b]"] {
-    padding: 20px 16px !important;
-    border-radius: 18px !important;
+    padding: 22px 18px !important;
+    border-radius: 19px !important;
   }
 
   [class*="from-[#071b12]"] h1 {
-    font-size: 21px !important;
+    font-size: 1.4rem;
   }
 
   .overflow-x-auto.rounded-2xl.border.border-stone-200\/80.bg-stone-100\/70 {
-    padding: 3px !important;
-    border-radius: 14px !important;
+    padding: 4px !important;
+    border-radius: 12px !important;
   }
 
   .overflow-x-auto.rounded-2xl.border.border-stone-200\/80.bg-stone-100\/70 button {
-    padding: 7px 12px !important;
+    min-height: 35px;
+    padding: 7px 11px !important;
     font-size: 11px !important;
   }
 
-  .grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6 > div {
-    padding: 18px !important;
-    border-radius: 18px !important;
+  .grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3.gap-6>div {
+    padding: 17px !important;
+    border-radius: 17px !important;
   }
 
   .rounded-3xl.border.border-stone-200\/80.bg-white.p-6.sm\:p-8 {
-    padding: 20px 16px !important;
-    border-radius: 18px !important;
-  }
-}
-/* Fixed application shell with an independently scrolling content pane. */
-html,
-body {
-  width: 100%;
-  height: 100%;
-  overflow: hidden !important;
-}
-
-.app-container {
-  display: block;
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  overflow: hidden;
-}
-
-.app-sidebar {
-  position: fixed;
-  inset: 0 auto 0 0;
-  width: var(--sidebar-width);
-  height: 100vh;
-  height: 100dvh;
-  overflow-x: hidden;
-  overflow-y: auto;
-  z-index: 1000;
-}
-
-.main-content {
-  display: flex;
-  flex-direction: column;
-  width: calc(100% - var(--sidebar-width));
-  height: 100vh;
-  height: 100dvh;
-  min-width: 0;
-  min-height: 0;
-  margin-left: var(--sidebar-width);
-  overflow: hidden;
-}
-
-.content-body {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-@media (max-width: 768px) {
-  html,
-  body {
-    height: auto;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+    padding: 19px 16px !important;
+    border-radius: 19px !important;
   }
 
-  .app-container {
-    height: auto;
-    min-height: 100vh;
-    min-height: 100dvh;
-    overflow: visible;
+  .rounded-3xl.border.border-stone-200\/80.bg-white.overflow-hidden {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
+}
 
-  .app-sidebar {
-    position: static;
-    width: 100%;
-    height: auto;
-    max-height: 48vh;
-  }
-
-  .main-content {
-    width: 100%;
-    height: auto;
-    min-height: 52vh;
-    margin-left: 0;
-    overflow: visible;
-  }
-
-  .content-body {
-    flex: none;
-    overflow: visible;
+@media (max-width: 480px) {
+  [class*="from-[#071b12]"][class*="to-[#143e2b]"] {
+    padding: 19px 15px !important;
   }
 }
