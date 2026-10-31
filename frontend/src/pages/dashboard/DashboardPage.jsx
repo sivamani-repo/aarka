@@ -70,7 +70,7 @@ export const DashboardPage = () => {
   const { metrics, financials, charts, operational } = data || {};
 
   return (
-    <div>
+    <div className="dashboard-page">
       {/* Header & Filter Controls */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
