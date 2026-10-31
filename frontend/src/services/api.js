@@ -282,16 +282,30 @@ export const financeAPI = {
 };
 export const financeApi = financeAPI;
 
-// --- Subsidies ---
+// --- Subsidies & Government Governance ---
 export const subsidiesAPI = {
   getSubsidies: (params) => api.get('/api/subsidies', { params }),
   getAll: (params) => api.get('/api/subsidies', { params }),
+  getSubsidy: (id) => api.get(`/api/subsidies/${id}`),
   createSubsidy: (data) => api.post('/api/subsidies', data),
   create: (data) => api.post('/api/subsidies', data),
   updateStatus: (id, data) => api.put(`/api/subsidies/${id}/status`, data),
+  updateOfficialStatus: (id, data) => api.post(`/api/subsidies/${id}/official-status`, data),
+  getSchemes: (params) => api.get('/api/subsidies/schemes', { params }),
+  getScheme: (code) => api.get(`/api/subsidies/schemes/${code}`),
+  getSchemeDocuments: (code) => api.get(`/api/subsidies/schemes/${code}/documents`),
+  getDashboardMetrics: () => api.get('/api/subsidies/dashboard-metrics'),
+  checkEligibility: (data) => api.post('/api/subsidies/check-eligibility', data),
+  createAssessment: (data) => api.post('/api/subsidies/assessments', data),
+  getAssessments: (params) => api.get('/api/subsidies/assessments', { params }),
+  calculate: (params) => api.get('/api/subsidies/calculate', { params }),
   uploadSubsidyDoc: (id, formData) => api.post(`/api/subsidies/${id}/documents`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
+  getDocuments: (id) => api.get(`/api/subsidies/${id}/documents`),
+  reviewDocument: (docId, data) => api.patch(`/api/subsidies/documents/${docId}/review`, data),
+  getHistory: (id) => api.get(`/api/subsidies/${id}/history`),
+  trackApplication: (ref) => api.get(`/api/subsidies/track/${ref}`),
 };
 export const subsidiesApi = subsidiesAPI;
 

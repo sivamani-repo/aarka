@@ -21,7 +21,13 @@ export const StatusBadge = ({ status }) => {
       'DELIVERED',
       'AVAILABLE',
       'APPROVED_BY_OEM',
-      'REPAIRED'
+      'REPAIRED',
+      'DISBURSED',
+      'COMMISSIONED',
+      'FEASIBILITY_APPROVED',
+      'VERIFIED_BY_AARKA',
+      'READY_FOR_SUBMISSION',
+      'POTENTIALLY_ELIGIBLE'
     ].includes(normalized)
   ) {
     badgeClass = 'badge-success';
@@ -38,7 +44,15 @@ export const StatusBadge = ({ status }) => {
       'TESTING',
       'WAITING_FOR_PARTS',
       'EXPIRING_SOON',
-      'PENDING_ACTIVATION'
+      'PENDING_ACTIVATION',
+      'DOCUMENTS_PENDING',
+      'UNDER_INTERNAL_REVIEW',
+      'SUBMITTED',
+      'FEASIBILITY_PENDING',
+      'INSPECTION_PENDING',
+      'SUBSIDY_CLAIM_PENDING',
+      'MORE_INFO_REQUIRED',
+      'REQUIRES_CONFIRMATION'
     ].includes(normalized)
   ) {
     badgeClass = 'badge-warning';
@@ -51,7 +65,10 @@ export const StatusBadge = ({ status }) => {
       'CRITICAL',
       'HIGH',
       'RETURNED_DEFECTIVE',
-      'CLAIM_RAISED'
+      'CLAIM_RAISED',
+      'FEASIBILITY_REJECTED',
+      'RE_UPLOAD_REQUIRED',
+      'POTENTIALLY_NOT_ELIGIBLE'
     ].includes(normalized)
   ) {
     badgeClass = 'badge-danger';
