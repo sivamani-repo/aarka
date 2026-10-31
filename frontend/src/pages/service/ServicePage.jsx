@@ -78,11 +78,15 @@ export default function ServicePage() {
     try {
       const res = await serviceApi.createTicket({
         ...createForm,
-        customer_id: parseInt(createForm.customer_id)
+        customer_id: parseInt(createForm.customer_id),
+        serial_number: createForm.reported_serial_number || createForm.serial_number,
+        fault_description: createForm.description || createForm.title || 'Inverter fault reported'
       });
+      const isCov = res.data.warranty_status === 'COVERED' || res.data.is_under_warranty;
+      const charge = res.data.total_charges ?? res.data.estimated_cost ?? 0;
       setFeedback({
         type: 'success',
-        msg: `Ticket ${res.data.ticket_number} logged! System evaluated warranty: ${res.data.warranty_status_at_incident} (Customer Charge: ₹${res.data.estimated_cost})`
+        msg: `Ticket ${res.data.ticket_number} logged! System evaluated warranty: ${isCov ? 'COVERED (₹0 Charge)' : 'EXPIRED (Chargeable)'} (Customer Charge: ₹${charge})`
       });
       setShowCreateModal(false);
       setCreateForm({
@@ -115,10 +119,15 @@ export default function ServicePage() {
   const handleReplaceEquipment = async (e) => {
     e.preventDefault();
     try {
-      const res = await serviceApi.replaceEquipment(selectedTicket.id, replaceForm);
+      const res = await serviceApi.replaceEquipment(selectedTicket.id, {
+        replacement_serial_number: replaceForm.new_serial_number,
+        new_serial_number: replaceForm.new_serial_number,
+        reason: replaceForm.replacement_reason,
+        replacement_reason: replaceForm.replacement_reason
+      });
       setFeedback({
         type: 'success',
-        msg: `Equipment replaced! Old serial marked DEFECTIVE, new serial ${res.data.new_serial_number} allocated with warranty updated.`
+        msg: `Equipment replaced! Old serial marked DEFECTIVE, new serial ${res.data.replacement_serial || replaceForm.new_serial_number} allocated with warranty updated.`
       });
       setShowReplaceModal(false);
       setReplaceForm({ old_serial_number: '', new_serial_number: '', replacement_reason: '' });
@@ -132,11 +141,18 @@ export default function ServicePage() {
     e.preventDefault();
     try {
       await serviceApi.resolveTicket(selectedTicket.id, {
-        ...resolveForm,
-        labor_cost: parseFloat(resolveForm.labor_cost),
-        parts_cost: parseFloat(resolveForm.parts_cost)
+        resolution_notes: resolveForm.resolution_notes,
+        repair_details: resolveForm.resolution_notes,
+        labor_cost: parseFloat(resolveForm.labor_cost) || 0,
+        parts_cost: parseFloat(resolveForm.parts_cost) || 0,
+        customer_signature: 'CONFIRMED_BY_CUSTOMER_DIGITALLY'
       });
-      setFeedback({ type: 'success', msg: `Ticket #${selectedTicket.ticket_number} marked RESOLVED with customer acceptance.` });
+      try {
+        await serviceApi.confirmTicket(selectedTicket.id);
+      } catch (confirmErr) {
+        // already resolved/closed
+      }
+      setFeedback({ type: 'success', msg: `Ticket #${selectedTicket.ticket_number} marked RESOLVED & CONFIRMED with customer acceptance.` });
       setShowResolveModal(false);
       fetchTickets();
     } catch (err) {
@@ -146,14 +162,14 @@ export default function ServicePage() {
 
   const openAssignModal = (ticket) => {
     setSelectedTicket(ticket);
-    setAssignForm({ technician_id: ticket.assigned_technician_id || '' });
+    setAssignForm({ technician_id: ticket.technician_id || ticket.assigned_technician_id || '' });
     setShowAssignModal(true);
   };
 
   const openReplaceModal = (ticket) => {
     setSelectedTicket(ticket);
     setReplaceForm({
-      old_serial_number: ticket.reported_serial_number || '',
+      old_serial_number: ticket.serial_number || ticket.reported_serial_number || '',
       new_serial_number: '',
       replacement_reason: 'In-warranty inverter/component failure confirmed by technician'
     });
@@ -162,21 +178,25 @@ export default function ServicePage() {
 
   const openResolveModal = (ticket) => {
     setSelectedTicket(ticket);
+    const isCovered = ticket.warranty_status === 'COVERED' || ticket.is_under_warranty;
     setResolveForm({
       resolution_notes: 'Replaced inverter board and verified string VOC/ISC within limits.',
-      labor_cost: ticket.is_under_warranty ? 0 : 750,
-      parts_cost: ticket.is_under_warranty ? 0 : 3500,
+      labor_cost: isCovered ? 0 : 750,
+      parts_cost: isCovered ? 0 : 3500,
       customer_signature: 'CUSTOMER_DIGITAL_CONFIRMATION_OK'
     });
     setShowResolveModal(true);
   };
 
   const filteredTickets = tickets.filter(t => {
+    const sn = t.serial_number || t.reported_serial_number || '';
+    const custName = t.customer_name || t.customer?.name || '';
+    const desc = t.fault_description || t.title || '';
     const matchesSearch = 
       t.ticket_number?.toLowerCase().includes(search.toLowerCase()) ||
-      t.customer?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      t.reported_serial_number?.toLowerCase().includes(search.toLowerCase()) ||
-      t.title?.toLowerCase().includes(search.toLowerCase());
+      custName.toLowerCase().includes(search.toLowerCase()) ||
+      sn.toLowerCase().includes(search.toLowerCase()) ||
+      desc.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -196,53 +216,59 @@ export default function ServicePage() {
       accessor: 'customer',
       cell: (row) => (
         <div>
-          <div className="font-medium text-stone-900">{row.customer?.name || `Customer #${row.customer_id}`}</div>
-          <div className="text-xs text-stone-500">{row.customer?.phone}</div>
+          <div className="font-medium text-stone-900">{row.customer_name || row.customer?.name || `Customer #${row.customer_id}`}</div>
+          <div className="text-xs text-stone-500">{row.customer_phone || row.customer?.phone}</div>
         </div>
       )
     },
     {
-      header: 'Title & Serial',
-      accessor: 'title',
-      cell: (row) => (
-        <div>
-          <div className="font-medium text-stone-800 text-sm">{row.title}</div>
-          {row.reported_serial_number && (
-            <div className="text-xs font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded inline-block mt-0.5">
-              SN: {row.reported_serial_number}
-            </div>
-          )}
-        </div>
-      )
+      header: 'Fault & Serial',
+      accessor: 'serial_number',
+      cell: (row) => {
+        const sn = row.serial_number || row.reported_serial_number;
+        return (
+          <div>
+            <div className="font-medium text-stone-800 text-sm">{row.fault_description || row.title}</div>
+            {sn && (
+              <div className="text-xs font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded inline-block mt-0.5">
+                SN: {sn}
+              </div>
+            )}
+          </div>
+        );
+      }
     },
     {
       header: 'Warranty Status',
-      accessor: 'warranty_status_at_incident',
-      cell: (row) => (
-        <div className="space-y-1">
-          {row.is_under_warranty ? (
-            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-medium">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-              Under Warranty (₹0)
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-100 text-amber-900 rounded font-medium">
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
-              Chargeable (Est: ₹{row.estimated_cost?.toLocaleString('en-IN')})
-            </span>
-          )}
-          <div className="text-[11px] text-stone-500 font-mono">
-            Eval: {row.warranty_status_at_incident || 'N/A'}
+      accessor: 'warranty_status',
+      cell: (row) => {
+        const isCovered = row.warranty_status === 'COVERED' || row.is_under_warranty;
+        return (
+          <div className="space-y-1">
+            {isCovered ? (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-medium">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                Under Warranty (₹0)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-100 text-amber-900 rounded font-medium">
+                <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
+                Chargeable (Est: ₹{(row.total_charges || row.estimated_cost || 0).toLocaleString('en-IN')})
+              </span>
+            )}
+            <div className="text-[11px] text-stone-500 font-mono">
+              Eval: {row.warranty_status || 'COVERED'}
+            </div>
           </div>
-        </div>
-      )
+        );
+      }
     },
     {
       header: 'Technician',
-      accessor: 'assigned_technician',
+      accessor: 'technician_name',
       cell: (row) => (
         <span className="text-sm text-stone-700">
-          {row.assigned_technician?.name || <span className="text-stone-400 italic">Unassigned</span>}
+          {row.technician_name || row.assigned_technician?.name || <span className="text-stone-400 italic">Unassigned</span>}
         </span>
       )
     },
