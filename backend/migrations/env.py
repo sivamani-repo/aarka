@@ -3,7 +3,7 @@ from logging.config import fileConfig
 from alembic import context
 
 from app.database import Base, engine
-from app.models.user import User
+import app.models  # Ensure all models are registered
 
 config = context.config
 
