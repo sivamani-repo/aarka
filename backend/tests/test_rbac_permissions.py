@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core.rbac import (
     ACTIONS,
+    DIRECTOR_ROLES,
     RESOURCES,
     effective_permissions,
     has_permission,
@@ -73,6 +74,30 @@ def test_role_and_individual_grants_are_enforced():
         session.flush()
         assert has_permission(session, sales_employee, "finance", "VIEW")
         assert {"resource": "finance", "action": "VIEW"} in effective_permissions(session, sales_employee)
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def test_all_director_role_names_have_full_module_access():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
+    try:
+        seed_rbac_catalog(session)
+        for role in DIRECTOR_ROLES:
+            director = User(
+                name=f"Director {role}",
+                email=f"{role.replace('/', '-').replace(' ', '-')}@example.com",
+                role=role,
+            )
+            session.add(director)
+            session.flush()
+            assert all(
+                has_permission(session, director, resource, action)
+                for resource in RESOURCES
+                for action in ACTIONS
+            )
     finally:
         session.close()
         engine.dispose()

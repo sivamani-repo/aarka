@@ -22,7 +22,7 @@ export const Topbar = () => {
       case '/serials': return 'Serial Number & Barcode Tracking';
       case '/dispatch': return 'Warehouse Dispatch & Logistics';
       case '/technicians': return 'Technician Force & Profiles';
-      case '/schedule': return 'Field Operations Scheduling';
+      case '/scheduling': return 'Field Operations Scheduling';
       case '/installations': return 'Installation Jobs & Handover';
       case '/warranties': return 'Automated Warranty Tracking';
       case '/service': return 'After-Sales Service & Repairs';

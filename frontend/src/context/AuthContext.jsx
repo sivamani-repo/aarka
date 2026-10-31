@@ -2,6 +2,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { authAPI } from '../services/api';
 
 const AuthContext = createContext(null);
+const DIRECTOR_ROLES = new Set([
+  'Director / Super Admin',
+  'Director / Admin',
+  'Director',
+  'Admin',
+]);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(() => {
@@ -83,22 +89,17 @@ export const AuthProvider = ({ children }) => {
 
   const hasRole = (allowedRoles) => {
     if (!user) return false;
-    if ([
-      'Director / Super Admin',
-      'Director / Admin',
-      'Admin',
-      'Director',
-    ].includes(user.role)) {
-      return true;
-    }
-    return allowedRoles.includes(user.role);
+    return DIRECTOR_ROLES.has(user.role) || allowedRoles.includes(user.role);
   };
 
-  const hasPermission = (resource, action = 'VIEW') =>
-    !!user?.permissions?.some(
+  const hasPermission = (resource, action = 'VIEW') => {
+    if (!user) return false;
+    if (DIRECTOR_ROLES.has(user.role)) return true;
+    return !!user.permissions?.some(
       (permission) =>
         permission.resource === resource && permission.action === action
     );
+  };
 
   return (
     <AuthContext.Provider

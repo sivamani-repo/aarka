@@ -63,7 +63,7 @@ export const Sidebar = () => {
       title: 'FIELD OPERATIONS',
       items: [
         { name: 'Technicians', path: '/technicians', icon: Wrench },
-        { name: 'Installation Schedule', path: '/schedule', icon: Calendar },
+        { name: 'Installation Schedule', path: '/scheduling', icon: Calendar },
         { name: 'Installations', path: '/installations', icon: Zap },
       ],
     },
@@ -99,7 +99,7 @@ export const Sidebar = () => {
           ? 'employees'
           : item.path === '/settings'
             ? 'settings'
-            : item.path === '/schedule'
+            : item.path === '/scheduling'
               ? 'installations'
               : item.path.replace('/', '');
         return hasPermission(resource);
@@ -118,6 +118,7 @@ export const Sidebar = () => {
         borderRight: '1px solid #163827',
         flexShrink: 0,
         userSelect: 'none',
+        overflow: 'hidden',
       }}
     >
       <NavLink
@@ -163,8 +164,10 @@ export const Sidebar = () => {
 
       {/* Navigation List */}
       <div
+        className="sidebar-navigation"
         style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           padding: '12px 10px',
         }}

@@ -55,18 +55,45 @@ const ProtectedRoute = ({ children }) => {
     if (!user) {
         return <Navigate to="/login" replace />;
     }
-    if (!user.employee_id || user.role === 'Customer') {
+    if (user.role === 'Customer') {
         return <Navigate to="/enquiry" replace />;
     }
 
     return children;
 };
 
+const AUTHORIZED_PAGES = [
+    { resource: 'dashboard', path: '/dashboard' },
+    { resource: 'leads', path: '/leads' },
+    { resource: 'customers', path: '/customers' },
+    { resource: 'surveys', path: '/surveys' },
+    { resource: 'products', path: '/packages' },
+    { resource: 'quotations', path: '/quotations' },
+    { resource: 'orders', path: '/orders' },
+    { resource: 'payments', path: '/payments' },
+    { resource: 'inventory', path: '/inventory' },
+    { resource: 'serials', path: '/serials' },
+    { resource: 'dispatches', path: '/dispatch' },
+    { resource: 'technicians', path: '/technicians' },
+    { resource: 'installations', path: '/installations' },
+    { resource: 'warranties', path: '/warranties' },
+    { resource: 'service', path: '/service' },
+    { resource: 'suppliers', path: '/suppliers' },
+    { resource: 'finance', path: '/finance' },
+    { resource: 'subsidies', path: '/subsidies' },
+    { resource: 'reports', path: '/reports' },
+    { resource: 'employees', path: '/team' },
+    { resource: 'settings', path: '/settings' },
+];
+
 const AuthorizedPage = ({ resource, children }) => {
     const { hasPermission } = useAuth();
-    return hasPermission(resource)
-        ? children
-        : <Navigate to="/dashboard" replace />;
+    if (hasPermission(resource)) return children;
+
+    const firstAuthorizedPage = AUTHORIZED_PAGES.find((page) =>
+        hasPermission(page.resource)
+    );
+    return <Navigate to={firstAuthorizedPage?.path || '/company-profile'} replace />;
 };
 
 export default function App() {
