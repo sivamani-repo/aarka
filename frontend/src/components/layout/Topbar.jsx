@@ -1,11 +1,12 @@
 import React from 'react';
 import { useLocation } from 'react-router-dom';
-import { LogOut, User, Activity, ShieldCheck, SunMedium } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 export const Topbar = () => {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const firstName = user?.name?.trim()?.[0] || 'A';
 
   const getPageTitle = (pathname) => {
     switch (pathname) {
@@ -91,6 +92,8 @@ export const Topbar = () => {
               </div>
               <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                 {user.role}
+                {user.department ? ` · ${user.department}` : ''}
+                {user.employee_id ? ` · ${user.employee_id}` : ''}
               </div>
             </div>
 
@@ -108,7 +111,7 @@ export const Topbar = () => {
                 fontSize: '14px',
               }}
             >
-              {user.name.charAt(0)}
+              {firstName.toUpperCase()}
             </div>
 
             <button

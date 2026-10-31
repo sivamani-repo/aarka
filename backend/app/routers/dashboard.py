@@ -2,7 +2,7 @@ from typing import Optional, Dict, Any, List
 from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 
 from app.database import get_db
 from app.models.customer import Customer, Lead
@@ -15,19 +15,116 @@ from app.models.service import ServiceTicket, WarrantyRecord
 from app.models.finance import ProjectExpense
 from app.models.subsidy import SubsidyApplication
 from app.core.permissions import get_current_user
+from app.core.rbac import canonical_role, has_permission
 from app.models.user import User
 
 router = APIRouter(prefix="/api/dashboard", tags=["Operational Dashboard"])
 
 
-def _filter_period(query, model, filter_start):
+def _scope_dashboard_query(db, query, model, current_user: User):
+    role = canonical_role(current_user.role)
+    if role == "Sales Executive":
+        assigned_leads = db.query(Lead.id).filter(Lead.assigned_user_id == current_user.id)
+        if model is Lead:
+            legacy_owner = and_(
+                Lead.assigned_user_id.is_(None),
+                or_(
+                    func.lower(Lead.assigned_sales_rep) == current_user.name.lower(),
+                    func.lower(Lead.assigned_sales_rep) == current_user.email.lower(),
+                ),
+            )
+            return query.filter(or_(Lead.assigned_user_id == current_user.id, legacy_owner))
+        if model is Customer:
+            return query.filter(or_(
+                Customer.assigned_user_id == current_user.id,
+                Customer.id.in_(
+                    db.query(Lead.customer_id).filter(Lead.assigned_user_id == current_user.id)
+                ),
+            ))
+        if model is SiteSurvey:
+            customer_ids = db.query(Customer.id).filter(or_(
+                Customer.assigned_user_id == current_user.id,
+                Customer.id.in_(
+                    db.query(Lead.customer_id).filter(Lead.assigned_user_id == current_user.id)
+                ),
+            ))
+            return query.filter(or_(
+                SiteSurvey.assigned_user_id == current_user.id,
+                SiteSurvey.customer_id.in_(customer_ids),
+            ))
+        if model is Quotation:
+            customer_ids = db.query(Customer.id).filter(or_(
+                Customer.assigned_user_id == current_user.id,
+                Customer.id.in_(
+                    db.query(Lead.customer_id).filter(Lead.assigned_user_id == current_user.id)
+                ),
+            ))
+            return query.filter(or_(
+                Quotation.customer_id.in_(customer_ids),
+                Quotation.lead_id.in_(assigned_leads),
+            ))
+        if model is SalesOrder:
+            customer_ids = db.query(Customer.id).filter(or_(
+                Customer.assigned_user_id == current_user.id,
+                Customer.id.in_(
+                    db.query(Lead.customer_id).filter(Lead.assigned_user_id == current_user.id)
+                ),
+            ))
+            return query.filter(or_(
+                SalesOrder.customer_id.in_(customer_ids),
+                SalesOrder.quotation_id.in_(
+                    db.query(Quotation.id).filter(Quotation.lead_id.in_(assigned_leads))
+                ),
+            ))
+    elif role == "Site Survey Engineer":
+        if model is SiteSurvey:
+            return query.filter(SiteSurvey.assigned_user_id == current_user.id)
+        if model is Customer:
+            return query.filter(Customer.id.in_(
+                db.query(SiteSurvey.customer_id).filter(SiteSurvey.assigned_user_id == current_user.id)
+            ))
+    elif role == "Solar Technician":
+        if model is InstallationJob:
+            return query.filter(InstallationJob.assigned_user_id == current_user.id)
+        if model is Customer:
+            return query.filter(Customer.id.in_(
+                db.query(InstallationJob.customer_id).filter(InstallationJob.assigned_user_id == current_user.id)
+            ))
+    elif role == "Dispatch Staff":
+        if model is Dispatch:
+            return query.filter(Dispatch.assigned_user_id == current_user.id)
+        if model is Customer:
+            return query.filter(Customer.id.in_(
+                db.query(SalesOrder.customer_id).join(
+                    Dispatch, Dispatch.order_id == SalesOrder.id
+                ).filter(Dispatch.assigned_user_id == current_user.id)
+            ))
+    elif role == "Support Executive":
+        if model is ServiceTicket:
+            return query.filter(ServiceTicket.assigned_user_id == current_user.id)
+        if model is Customer:
+            return query.filter(Customer.id.in_(
+                db.query(ServiceTicket.customer_id).filter(ServiceTicket.assigned_user_id == current_user.id)
+            ))
+        if model is WarrantyRecord:
+            return query.filter(WarrantyRecord.customer_id.in_(
+                db.query(ServiceTicket.customer_id).filter(ServiceTicket.assigned_user_id == current_user.id)
+            ))
+    return query
+
+
+def _filter_period(query, model, filter_start, db=None, current_user: Optional[User] = None):
+    if db is not None and current_user is not None:
+        query = _scope_dashboard_query(db, query, model, current_user)
     if filter_start is not None:
         return query.filter(model.created_at >= filter_start)
     return query
 
 
-def _count_period(db, model, filter_start, *conditions):
-    query = _filter_period(db.query(func.count(model.id)), model, filter_start)
+def _count_period(db, model, filter_start, *conditions, current_user: User):
+    query = _filter_period(
+        db.query(func.count(model.id)), model, filter_start, db, current_user
+    )
     if conditions:
         query = query.filter(*conditions)
     return query.scalar() or 0
@@ -50,34 +147,41 @@ def get_dashboard_summary(
         filter_start = None
 
     # 1. Business Metrics
-    total_customers = _count_period(db, Customer, filter_start)
-    leads_query = _filter_period(db.query(Lead), Lead, filter_start)
-    total_enquiries = _count_period(db, Lead, filter_start)
-    new_leads = _count_period(db, Lead, filter_start, Lead.stage == "NEW")
-    qualified_leads = _count_period(db, Lead, filter_start, Lead.stage == "QUALIFIED")
+    total_customers = _count_period(db, Customer, filter_start, current_user=current_user)
+    leads_query = _filter_period(db.query(Lead), Lead, filter_start, db, current_user)
+    total_enquiries = _count_period(db, Lead, filter_start, current_user=current_user)
+    new_leads = _count_period(db, Lead, filter_start, Lead.stage == "NEW", current_user=current_user)
+    qualified_leads = _count_period(db, Lead, filter_start, Lead.stage == "QUALIFIED", current_user=current_user)
 
-    surveys_query = _filter_period(db.query(SiteSurvey), SiteSurvey, filter_start)
+    surveys_query = _filter_period(db.query(SiteSurvey), SiteSurvey, filter_start, db, current_user)
     pending_surveys = _count_period(db, SiteSurvey, filter_start,
         SiteSurvey.status.in_(["SCHEDULED", "IN_PROGRESS", "SUBMITTED"]),
-        SiteSurvey.approval_status != "APPROVED"
+        SiteSurvey.approval_status != "APPROVED",
+        current_user=current_user,
     )
 
-    quotations_query = _filter_period(db.query(Quotation), Quotation, filter_start)
+    quotations_query = _filter_period(db.query(Quotation), Quotation, filter_start, db, current_user)
     approved_quotations = _count_period(
-        db, Quotation, filter_start, Quotation.status.in_(["APPROVED", "ACCEPTED"])
+        db, Quotation, filter_start, Quotation.status.in_(["APPROVED", "ACCEPTED"]),
+        current_user=current_user,
     )
-    orders_query = _filter_period(db.query(SalesOrder), SalesOrder, filter_start)
-    confirmed_orders = _count_period(db, SalesOrder, filter_start, SalesOrder.status != "CANCELLED")
+    orders_query = _filter_period(db.query(SalesOrder), SalesOrder, filter_start, db, current_user)
+    confirmed_orders = _count_period(
+        db, SalesOrder, filter_start, SalesOrder.status != "CANCELLED",
+        current_user=current_user,
+    )
 
-    installations_query = _filter_period(db.query(InstallationJob), InstallationJob, filter_start)
+    installations_query = _filter_period(db.query(InstallationJob), InstallationJob, filter_start, db, current_user)
     active_installations = _count_period(
         db, InstallationJob, filter_start,
-        InstallationJob.status.in_(["ASSIGNED", "SCHEDULED", "IN_PROGRESS", "TESTING"])
+        InstallationJob.status.in_(["ASSIGNED", "SCHEDULED", "IN_PROGRESS", "TESTING"]),
+        current_user=current_user,
     )
 
     completed_installations = _count_period(
         db, InstallationJob, filter_start,
-        InstallationJob.status.in_(["COMPLETED", "CUSTOMER_ACCEPTED"])
+        InstallationJob.status.in_(["COMPLETED", "CUSTOMER_ACCEPTED"]),
+        current_user=current_user,
     )
 
     # Financial & Receivables
@@ -104,17 +208,20 @@ def get_dashboard_summary(
     low_stock_count = sum(1 for it in inventory_items if it.quantity <= it.reorder_level)
 
     # Service & Warranty
-    tickets_query = _filter_period(db.query(ServiceTicket), ServiceTicket, filter_start)
+    tickets_query = _filter_period(db.query(ServiceTicket), ServiceTicket, filter_start, db, current_user)
     open_service_tickets = _count_period(
         db, ServiceTicket, filter_start,
-        ServiceTicket.status.in_(["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_FOR_PARTS"])
+        ServiceTicket.status.in_(["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_FOR_PARTS"]),
+        current_user=current_user,
     )
     active_warranties = _count_period(
-        db, WarrantyRecord, filter_start, WarrantyRecord.status == "COVERED"
+        db, WarrantyRecord, filter_start, WarrantyRecord.status == "COVERED",
+        current_user=current_user,
     )
     pending_subsidies = _count_period(
         db, SubsidyApplication, filter_start,
-        SubsidyApplication.approval_status.in_(["UNDER_REVIEW", "SUBMITTED", "DOCUMENTS_PENDING"])
+        SubsidyApplication.approval_status.in_(["UNDER_REVIEW", "SUBMITTED", "DOCUMENTS_PENDING"]),
+        current_user=current_user,
     )
 
     # Charts Data
@@ -123,13 +230,16 @@ def get_dashboard_summary(
         {"stage": "Enquiry Received", "count": total_enquiries},
         {"stage": "Qualified", "count": _count_period(
             db, Lead, filter_start,
-            Lead.stage.in_(["QUALIFIED", "SURVEY_SCHEDULED", "SURVEY_APPROVED", "QUOTATION", "CONVERTED"])
+            Lead.stage.in_(["QUALIFIED", "SURVEY_SCHEDULED", "SURVEY_APPROVED", "QUOTATION", "CONVERTED"]),
+            current_user=current_user,
         )},
         {"stage": "Survey Done", "count": _count_period(
-            db, SiteSurvey, filter_start, SiteSurvey.approval_status == "APPROVED"
+            db, SiteSurvey, filter_start, SiteSurvey.approval_status == "APPROVED",
+            current_user=current_user,
         )},
         {"stage": "Quotation Sent", "count": _count_period(
-            db, Quotation, filter_start, Quotation.status.in_(["SENT", "ACCEPTED"])
+            db, Quotation, filter_start, Quotation.status.in_(["SENT", "ACCEPTED"]),
+            current_user=current_user,
         )},
         {"stage": "Orders Won", "count": confirmed_orders},
         {"stage": "Installed", "count": completed_installations}
@@ -194,11 +304,13 @@ def get_dashboard_summary(
     recent_leads = leads_query.order_by(Lead.id.desc()).limit(5).all()
     upcoming_surveys = surveys_query.filter(SiteSurvey.status.in_(["SCHEDULED", "IN_PROGRESS"])).order_by(SiteSurvey.scheduled_date.asc()).limit(5).all()
     today_installs = installations_query.filter(InstallationJob.status.in_(["SCHEDULED", "IN_PROGRESS", "ASSIGNED"])).order_by(InstallationJob.scheduled_date.asc()).limit(5).all()
-    pending_dispatches = _filter_period(db.query(Dispatch), Dispatch, filter_start).filter(Dispatch.status == "DISPATCHED", Dispatch.customer_confirmed == False).order_by(Dispatch.id.desc()).limit(5).all()
+    pending_dispatches = _filter_period(
+        db.query(Dispatch), Dispatch, filter_start, db, current_user
+    ).filter(Dispatch.status == "DISPATCHED", Dispatch.customer_confirmed == False).order_by(Dispatch.id.desc()).limit(5).all()
     recent_payments = _filter_period(db.query(Payment), Payment, filter_start).order_by(Payment.id.desc()).limit(5).all()
     low_stock_items = db.query(InventoryItem).filter(InventoryItem.quantity <= InventoryItem.reorder_level).limit(5).all()
 
-    return {
+    response = {
         "period": period,
         "metrics": {
             "total_customers": total_customers,
@@ -261,3 +373,45 @@ def get_dashboard_summary(
             ]
         }
     }
+    can_view_finance = (
+        has_permission(db, current_user, "payments", "VIEW")
+        or has_permission(db, current_user, "finance", "VIEW")
+    )
+    if not can_view_finance:
+        response["financials"] = None
+        response["metrics"].pop("pending_customer_payments", None)
+        response["charts"].pop("revenue_trend", None)
+        response["operational"].pop("recent_payments", None)
+    if not has_permission(db, current_user, "customers", "VIEW"):
+        response["metrics"].pop("total_customers", None)
+        response["operational"].pop("upcoming_surveys", None)
+    if not has_permission(db, current_user, "leads", "VIEW"):
+        for key in ("total_enquiries", "new_leads", "qualified_leads"):
+            response["metrics"].pop(key, None)
+        response["charts"].pop("funnel", None)
+        response["operational"].pop("recent_leads", None)
+    if not has_permission(db, current_user, "surveys", "VIEW"):
+        response["metrics"].pop("pending_site_surveys", None)
+        response["operational"].pop("upcoming_surveys", None)
+    if not has_permission(db, current_user, "orders", "VIEW"):
+        response["metrics"].pop("approved_quotations", None)
+        response["metrics"].pop("confirmed_orders", None)
+        response["charts"].pop("project_status_dist", None)
+    if not has_permission(db, current_user, "installations", "VIEW"):
+        response["metrics"].pop("active_installations", None)
+        response["metrics"].pop("completed_installations", None)
+        response["operational"].pop("today_installations", None)
+    if not has_permission(db, current_user, "inventory", "VIEW"):
+        response["metrics"].pop("inventory_valuation", None)
+        response["metrics"].pop("low_stock_count", None)
+        response["operational"].pop("low_stock_items", None)
+    if not has_permission(db, current_user, "service", "VIEW"):
+        response["metrics"].pop("open_service_tickets", None)
+        response["charts"].pop("ticket_priority_dist", None)
+    if not has_permission(db, current_user, "warranties", "VIEW"):
+        response["metrics"].pop("active_warranties", None)
+    if not has_permission(db, current_user, "subsidies", "VIEW"):
+        response["metrics"].pop("pending_subsidies", None)
+    if not has_permission(db, current_user, "dispatches", "VIEW"):
+        response["operational"].pop("pending_dispatches", None)
+    return response

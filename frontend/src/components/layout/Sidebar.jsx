@@ -29,13 +29,13 @@ import {
 import { useAuth } from '../../context/AuthContext';
 
 export const Sidebar = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
 
   const navSections = [
     {
       title: 'CORE SALES',
       items: [
-        { name: 'Dashboard', path: '/', icon: LayoutDashboard },
+        { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
         { name: 'Leads', path: '/leads', icon: Users },
         { name: 'Customers', path: '/customers', icon: UserCheck },
         { name: 'Site Surveys', path: '/surveys', icon: ClipboardCheck },
@@ -91,6 +91,22 @@ export const Sidebar = () => {
     },
   ];
 
+  const visibleNavSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => {
+        const resource = item.path === '/team'
+          ? 'employees'
+          : item.path === '/settings'
+            ? 'settings'
+            : item.path === '/schedule'
+              ? 'installations'
+              : item.path.replace('/', '');
+        return hasPermission(resource);
+      }),
+    }))
+    .filter((section) => section.items.length > 0);
+
   return (
     <aside
       className="app-sidebar"
@@ -116,7 +132,7 @@ export const Sidebar = () => {
             width: '36px',
             height: '36px',
             borderRadius: '10px',
-            background: 'linear-flex(135deg, #2e8b60, #f59e0b)',
+            background: 'linear-gradient(135deg, #2e8b60, #f59e0b)',
             backgroundColor: '#2e8b60',
             display: 'flex',
             alignItems: 'center',
@@ -153,8 +169,8 @@ export const Sidebar = () => {
           padding: '12px 10px',
         }}
       >
-        {navSections.map((sec, idx) => (
-          <div key={idx} style={{ marginBottom: '16px' }}>
+        {visibleNavSections.map((sec) => (
+          <div key={sec.title} style={{ marginBottom: '16px' }}>
             <div
               style={{
                 fontSize: '10px',

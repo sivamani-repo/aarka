@@ -71,7 +71,7 @@ graph TB
     end
 
     subgraph API["Application Tier (FastAPI + Python 3.9)"]
-        AuthModule["JWT Security & 7-Role RBAC Middleware"]
+        AuthModule["JWT Security & 13-Role RBAC Middleware"]
         RuleEngine["AARKA Business Rule Engine (Rules 1–16)"]
         BOMEngine["Dynamic Solar BOM Calculator"]
         REST["90+ Modular REST Endpoints (23 Routers)"]
@@ -150,19 +150,19 @@ The frontend is built using **React 18** and **Vite** following an enterprise Sa
 
 ---
 
-## 👥 7. Role-Based Access Control (7 Roles)
+## 👥 7. Role-Based Access Control (13 Roles)
 
-| Role | Demo Email | Password | Access Scope |
-| :--- | :--- | :--- | :--- |
-| **Director / Admin** | `admin@aarka.com` | `admin123` | Full unrestricted access across all 22 modules and executive CSV reports |
-| **Sales Representative** | `sales@aarka.com` | `sales123` | Leads CRM, qualification, quotation builder, customer orders |
-| **Site Surveyor** | `survey@aarka.com` | `survey123` | Site surveys, mobile roof observations, survey approval submissions |
-| **Warehouse Manager** | `warehouse@aarka.com` | `warehouse123` | Inventory balances, barcode scanning, order picklists, dispatch gate passes |
-| **Installation Engineer** | `install@aarka.com` | `install123` | Field installations schedule, 9-point checklist execution, customer signature |
-| **Service Coordinator** | `service@aarka.com` | `service123` | Maintenance complaints, warranty evaluations, equipment swap workflows |
-| **Finance / Accounts** | `finance@aarka.com` | `finance123` | Project profitability, expense logging, tax invoices, subsidy tracking |
+The backend enforces resource/action permissions for these employee roles:
 
-*The login page (`/login`) includes **1-click quick-fill buttons** for each role.*
+- **Director / Super Admin** — company-wide administration and oversight.
+- **Operations Manager** — cross-department project coordination.
+- **Sales Manager** and **Sales Executive** — sales pipeline and customer workflows.
+- **Warehouse Manager**, **Dispatch Staff**, and **Storekeeper** — inventory and dispatch workflows.
+- **Finance Manager** — payments and financial records.
+- **Installation Manager**, **Site Survey Engineer**, and **Solar Technician** — survey and installation workflows.
+- **Service Manager** and **Support Executive** — warranty and customer service workflows.
+
+Employee accounts are managed from Team Management. Sample accounts created by the local seed script are for development only; do not use them in production.
 
 ---
 
@@ -193,9 +193,11 @@ docker compose up -d db
 # Apply migrations
 alembic -c backend/alembic.ini upgrade head
 
-# Seed 7 roles, 15 technicians, 14 products, 16 packages, BOM templates, orders, and warranties
+# Seed sample employees, 15 technicians, 14 products, 16 packages, BOM templates, orders, and warranties
 python backend/seed_data.py
 ```
+
+The RBAC migration creates the permission catalog and assignment columns. Apply migrations before starting the API against an existing database; `create_all()` does not update existing tables.
 
 ### 3. Launch Development Servers
 ```bash

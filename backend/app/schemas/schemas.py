@@ -102,24 +102,38 @@ class TokenResponse(BaseModel):
 
 
 class UserCreate(BaseModel):
-    name: str
+    name: str = Field(..., min_length=2, max_length=120)
     email: str
-    password: str
-    role: str = "Sales Representative"
+    password: str = Field(..., min_length=8)
+    role: str
     phone: Optional[str] = None
+    reporting_manager_id: Optional[int] = None
+    permissions: List[str] = Field(default_factory=list)
 
     @field_validator("email")
     @classmethod
     def check_email(cls, v: str) -> str:
         return validate_email_format(v)
 
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v: str) -> str:
+        return validate_password_strength(v)
+
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
     email: Optional[str] = None
     role: Optional[str] = None
     phone: Optional[str] = None
     is_active: Optional[bool] = None
+    reporting_manager_id: Optional[int] = None
+    permissions: Optional[List[str]] = None
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, v: Optional[str]) -> Optional[str]:
+        return validate_email_format(v) if v is not None else None
 
 
 class UserOut(BaseModel):
@@ -131,6 +145,11 @@ class UserOut(BaseModel):
     is_active: bool
     is_verified: bool = False
     created_at: Optional[datetime] = None
+    employee_id: Optional[str] = None
+    department: Optional[str] = None
+    reporting_manager_id: Optional[int] = None
+    permissions: List[Dict[str, str]] = Field(default_factory=list)
+    additional_permissions: List[Dict[str, str]] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -149,6 +168,7 @@ class CustomerCreate(BaseModel):
     solar_requirement: str = "On-Grid"
     monthly_bill: float = 0.0
     subsidy_required: bool = False
+    assigned_user_id: Optional[int] = None
 
 
 class CustomerUpdate(BaseModel):
@@ -161,6 +181,7 @@ class CustomerUpdate(BaseModel):
     status: Optional[str] = None
     monthly_bill: Optional[float] = None
     required_capacity_kw: Optional[float] = None
+    assigned_user_id: Optional[int] = None
 
 
 class CustomerOut(BaseModel):
@@ -177,6 +198,7 @@ class CustomerOut(BaseModel):
     monthly_bill: Optional[float] = None
     subsidy_required: Optional[bool] = None
     status: str
+    assigned_user_id: Optional[int] = None
     created_at: Optional[datetime] = None
 
     class Config:
@@ -216,6 +238,7 @@ class LeadCreate(BaseModel):
     grid_suitable: bool = True
     estimated_value: float = 0.0
     assigned_sales_rep: Optional[str] = None
+    assigned_user_id: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -229,6 +252,7 @@ class LeadUpdate(BaseModel):
     solar_requirement: Optional[str] = None
     monthly_bill: Optional[float] = None
     assigned_sales_rep: Optional[str] = None
+    assigned_user_id: Optional[int] = None
     follow_up_date: Optional[date] = None
     stage: Optional[str] = None
     status: Optional[str] = None
@@ -267,6 +291,7 @@ class LeadOut(BaseModel):
     grid_suitable: bool
     estimated_value: float
     assigned_sales_rep: Optional[str] = None
+    assigned_user_id: Optional[int] = None
     follow_up_date: Optional[date] = None
     stage: str
     status: str
@@ -308,6 +333,7 @@ class SurveyCreate(BaseModel):
     customer_id: int
     lead_id: Optional[int] = None
     technician_id: Optional[int] = None
+    assigned_user_id: Optional[int] = None
     scheduled_date: date
     required_capacity_kw: float = 3.0
     monthly_bill: float = 0.0
@@ -316,6 +342,7 @@ class SurveyCreate(BaseModel):
 
 class SurveyUpdate(BaseModel):
     technician_id: Optional[int] = None
+    assigned_user_id: Optional[int] = None
     actual_survey_date: Optional[date] = None
     roof_area: Optional[float] = None
     shadow_free_area: Optional[float] = None
@@ -342,6 +369,7 @@ class SurveyOut(BaseModel):
     lead_id: Optional[int] = None
     customer_id: int
     technician_id: Optional[int] = None
+    assigned_user_id: Optional[int] = None
     scheduled_date: Optional[date] = None
     actual_survey_date: Optional[date] = None
     roof_area: float
@@ -641,6 +669,7 @@ class DispatchCreate(BaseModel):
     delivery_reference: Optional[str] = None
     dispatch_date: Optional[date] = None
     dispatched_by: Optional[str] = "Warehouse Manager"
+    assigned_user_id: Optional[int] = None
     serial_numbers: List[str]
     notes: Optional[str] = None
 
@@ -655,6 +684,7 @@ class DispatchConfirmDelivery(BaseModel):
 class DispatchOut(BaseModel):
     id: int
     order_id: int
+    assigned_user_id: Optional[int] = None
     order_number: Optional[str] = None
     customer_id: Optional[int] = None
     customer_name: Optional[str] = None
@@ -677,6 +707,7 @@ class DispatchOut(BaseModel):
 class InstallationCreate(BaseModel):
     order_id: int
     technician_id: int
+    assigned_user_id: Optional[int] = None
     scheduled_date: date
     capacity_kw: float = 3.0
 
@@ -706,6 +737,7 @@ class InstallationOut(BaseModel):
     customer_phone: Optional[str] = None
     customer_address: Optional[str] = None
     technician_id: Optional[int] = None
+    assigned_user_id: Optional[int] = None
     technician_name: Optional[str] = None
     assigned_at: Optional[datetime] = None
     scheduled_date: Optional[date] = None
@@ -814,6 +846,7 @@ class WarrantyClaimOut(BaseModel):
 
 class ServiceTicketCreate(BaseModel):
     customer_id: int
+    assigned_user_id: Optional[int] = None
     serial_number: Optional[str] = None
     reported_serial_number: Optional[str] = None
     fault_description: Optional[str] = None
@@ -827,6 +860,7 @@ class ServiceTicketCreate(BaseModel):
 
 class ServiceTicketUpdate(BaseModel):
     technician_id: Optional[int] = None
+    assigned_user_id: Optional[int] = None
     diagnosis: Optional[str] = None
     repair_details: Optional[str] = None
     resolution_notes: Optional[str] = None
@@ -851,6 +885,7 @@ class ServiceTicketOut(BaseModel):
     id: int
     ticket_number: str
     customer_id: int
+    assigned_user_id: Optional[int] = None
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
     customer_address: Optional[str] = None

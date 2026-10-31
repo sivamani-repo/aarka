@@ -19,10 +19,12 @@ class Customer(Base):
     monthly_bill = Column(Float, nullable=True, default=0.0)
     subsidy_required = Column(Boolean, default=False)
     status = Column(String(60), default="ACTIVE")
+    assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     leads = relationship("Lead", back_populates="customer")
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])
 
 
 class Lead(Base):
@@ -47,6 +49,7 @@ class Lead(Base):
     grid_suitable = Column(Boolean, default=True)
     estimated_value = Column(Float, default=0.0)
     assigned_sales_rep = Column(String(100), nullable=True)
+    assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     follow_up_date = Column(Date, nullable=True)
     stage = Column(String(60), default="NEW")
     status = Column(String(60), default="OPEN")
@@ -55,4 +58,4 @@ class Lead(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     customer = relationship("Customer", back_populates="leads")
-
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])

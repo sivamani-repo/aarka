@@ -2,15 +2,45 @@ import random
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import and_, func, or_
 
 from app.database import get_db
 from app.models.customer import Customer, Lead
 from app.schemas.schemas import LeadCreate, LeadUpdate, LeadQualify, LeadOut
 from app.core.permissions import get_current_user
+from app.core.rbac import ASSIGN, ROLE_DEPARTMENTS, canonical_role, has_permission
 from app.models.user import User
 
 router = APIRouter(prefix="/api/leads", tags=["Leads"])
+
+
+def _scope_leads(query, current_user: User):
+    if canonical_role(current_user.role) != "Sales Executive":
+        return query
+    legacy_owner = and_(
+        Lead.assigned_user_id.is_(None),
+        or_(
+            func.lower(Lead.assigned_sales_rep) == current_user.name.lower(),
+            func.lower(Lead.assigned_sales_rep) == current_user.email.lower(),
+        ),
+    )
+    return query.filter(or_(Lead.assigned_user_id == current_user.id, legacy_owner))
+
+
+def _resolve_assignee(db: Session, current_user: User, requested_id: Optional[int]) -> Optional[int]:
+    is_sales_executive = canonical_role(current_user.role) == "Sales Executive"
+    if is_sales_executive:
+        if requested_id not in (None, current_user.id):
+            raise HTTPException(status_code=403, detail="Sales executives can only assign leads to themselves.")
+        return current_user.id
+    if requested_id is None:
+        return None
+    if not has_permission(db, current_user, "leads", ASSIGN):
+        raise HTTPException(status_code=403, detail="Lead assignment permission is required.")
+    assignee = db.query(User).filter(User.id == requested_id, User.is_active.is_(True)).first()
+    if assignee is None or ROLE_DEPARTMENTS.get(canonical_role(assignee.role)) != "Sales":
+        raise HTTPException(status_code=400, detail="Select an active employee in the Sales department.")
+    return assignee.id
 
 
 @router.get("", response_model=List[LeadOut])
@@ -21,7 +51,7 @@ def list_leads(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Lead)
+    query = _scope_leads(db.query(Lead), current_user)
     if search:
         search_filter = f"%{search.strip()}%"
         query = query.filter(
@@ -47,6 +77,7 @@ def create_lead(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    assigned_user_id = _resolve_assignee(db, current_user, payload.assigned_user_id)
     clean_phone = payload.phone.strip()
     customer = db.query(Customer).filter(Customer.phone == clean_phone).first()
     if not customer:
@@ -62,7 +93,8 @@ def create_lead(
             solar_requirement=payload.solar_requirement,
             monthly_bill=payload.monthly_bill,
             subsidy_required=payload.subsidy_required,
-            status="ACTIVE"
+            status="ACTIVE",
+            assigned_user_id=assigned_user_id,
         )
         db.add(customer)
         db.commit()
@@ -92,7 +124,12 @@ def create_lead(
         roof_availability=payload.roof_availability,
         grid_suitable=payload.grid_suitable,
         estimated_value=est_value,
-        assigned_sales_rep=payload.assigned_sales_rep or current_user.name,
+        assigned_sales_rep=(
+            current_user.name
+            if canonical_role(current_user.role) == "Sales Executive"
+            else payload.assigned_sales_rep or current_user.name
+        ),
+        assigned_user_id=assigned_user_id,
         stage="NEW",
         status="OPEN",
         notes=payload.notes
@@ -109,7 +146,7 @@ def get_lead(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    lead = _scope_leads(db.query(Lead), current_user).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     return lead
@@ -122,7 +159,7 @@ def update_lead(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    lead = _scope_leads(db.query(Lead), current_user).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
@@ -142,8 +179,12 @@ def update_lead(
         lead.solar_requirement = payload.solar_requirement
     if payload.monthly_bill is not None:
         lead.monthly_bill = payload.monthly_bill
+    if payload.assigned_sales_rep is not None and not has_permission(db, current_user, "leads", ASSIGN):
+        raise HTTPException(status_code=403, detail="Lead assignment permission is required.")
     if payload.assigned_sales_rep is not None:
         lead.assigned_sales_rep = payload.assigned_sales_rep
+    if "assigned_user_id" in payload.model_fields_set:
+        lead.assigned_user_id = _resolve_assignee(db, current_user, payload.assigned_user_id)
     if payload.follow_up_date is not None:
         lead.follow_up_date = payload.follow_up_date
     if payload.stage is not None:
@@ -171,7 +212,7 @@ def qualify_lead(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    lead = _scope_leads(db.query(Lead), current_user).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
 
@@ -195,10 +236,9 @@ def delete_lead(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    lead = db.query(Lead).filter(Lead.id == lead_id).first()
+    lead = _scope_leads(db.query(Lead), current_user).filter(Lead.id == lead_id).first()
     if not lead:
         raise HTTPException(status_code=404, detail="Lead not found")
     db.delete(lead)
     db.commit()
     return {"success": True, "message": "Lead deleted"}
-

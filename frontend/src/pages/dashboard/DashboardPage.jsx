@@ -34,6 +34,7 @@ import {
 import { dashboardAPI } from '../../services/api';
 import { StatCard } from '../../components/common/StatCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { useAuth } from '../../context/AuthContext';
 
 const PIE_COLORS = ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#d97706', '#ef4444'];
 const DASHBOARD_PERIODS = [
@@ -44,6 +45,7 @@ const DASHBOARD_PERIODS = [
 ];
 
 export const DashboardPage = () => {
+  const { user, hasPermission } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
@@ -86,6 +88,22 @@ export const DashboardPage = () => {
 
   const { metrics, financials, charts, operational } = data || {};
   const selectedPeriodIndex = DASHBOARD_PERIODS.findIndex(({ value }) => value === period);
+  const dashboardTitles = {
+    'Director / Super Admin': 'Executive Operations Dashboard',
+    'Operations Manager': 'Operations Control Dashboard',
+    'Sales Manager': 'Sales & Customer Dashboard',
+    'Warehouse Manager': 'Warehouse & Inventory Dashboard',
+    'Finance Manager': 'Finance & Accounts Dashboard',
+    'Installation Manager': 'Solar Installation Dashboard',
+    'Service Manager': 'Service & Maintenance Dashboard',
+    'Sales Executive': 'Sales Executive Dashboard',
+    'Site Survey Engineer': 'Site Survey Dashboard',
+    'Solar Technician': 'Technician Dashboard',
+    'Dispatch Staff': 'Dispatch Dashboard',
+    Storekeeper: 'Store Management Dashboard',
+    'Support Executive': 'Customer Support Dashboard',
+  };
+  const showFinance = hasPermission('payments') || hasPermission('finance');
 
   return (
     <div className="dashboard-page">
@@ -93,10 +111,11 @@ export const DashboardPage = () => {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', fontFamily: 'var(--font-display)', letterSpacing: '-0.02em' }}>
-            Executive Operations Dashboard
+            {dashboardTitles[user?.role] || 'AARKA Operations Dashboard'}
           </h1>
           <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
-            Real-time PostgreSQL analytics across inquiries, surveys, warehouse dispatch, installations, and margins.
+            Welcome back, {user?.name}. {user?.department || 'AARKA'} operations overview
+            {user?.employee_id ? ` · ${user.employee_id}` : ''}
           </p>
         </div>
 
@@ -133,7 +152,7 @@ export const DashboardPage = () => {
       )}
 
       {/* Financial Overview Banner */}
-      <div
+      {showFinance && <div
         className="aarka-card"
         style={{
           background: 'linear-gradient(135deg, #0c2318 0%, #174530 100%)',
@@ -194,28 +213,34 @@ export const DashboardPage = () => {
             <div style={{ fontSize: '11px', color: '#94bca7', marginTop: '2px' }}>₹{(financials?.gross_margin || 0).toLocaleString()} net contribution</div>
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* 12 Core Business Operational Metrics */}
       <div className="stat-grid">
-        <StatCard title="Total Customers" value={metrics?.total_customers || 0} icon={UserCheck} subtext="Residential & Commercial accounts" />
-        <StatCard title="Total Inquiries" value={metrics?.total_enquiries || 0} icon={Users} subtext={`${metrics?.new_leads || 0} new leads pending contact`} />
-        <StatCard title="Qualified Leads" value={metrics?.qualified_leads || 0} icon={CheckCircle} color="accent" subtext="Ready for site inspection" />
-        <StatCard title="Pending Site Surveys" value={metrics?.pending_site_surveys || 0} icon={ClipboardCheck} color="accent" subtext="Awaiting technician visit" />
-        <StatCard title="Approved Quotations" value={metrics?.approved_quotations || 0} icon={ShoppingCart} subtext="Quotations agreed by customer" />
-        <StatCard title="Confirmed Orders" value={metrics?.confirmed_orders || 0} icon={ShoppingCart} subtext="Active project lifecycle orders" />
-        <StatCard title="Active Installations" value={metrics?.active_installations || 0} icon={Zap} color="accent" subtext="Field crews currently deployed" />
-        <StatCard title="Completed Projects" value={metrics?.completed_installations || 0} icon={CheckCircle} subtext="Signed customer acceptance" />
-        <StatCard title="Inventory Valuation" value={`₹${(metrics?.inventory_valuation || 0).toLocaleString()}`} icon={Boxes} subtext="Current warehouse asset balance" />
-        <StatCard title="Low-Stock Alerts" value={metrics?.low_stock_count || 0} icon={AlertTriangle} color="accent" subtext="Below configured reorder levels" />
-        <StatCard title="Open Service Tickets" value={metrics?.open_service_tickets || 0} icon={Headphones} subtext="After-sales maintenance & repairs" />
-        <StatCard title="Active Warranties" value={metrics?.active_warranties || 0} icon={ShieldCheck} subtext="Equipment under active coverage" />
+        {hasPermission('customers') && <StatCard title="Total Customers" value={metrics?.total_customers || 0} icon={UserCheck} subtext="Residential & Commercial accounts" />}
+        {hasPermission('leads') && <>
+          <StatCard title="Total Inquiries" value={metrics?.total_enquiries || 0} icon={Users} subtext={`${metrics?.new_leads || 0} new leads pending contact`} />
+          <StatCard title="Qualified Leads" value={metrics?.qualified_leads || 0} icon={CheckCircle} color="accent" subtext="Ready for site inspection" />
+        </>}
+        {hasPermission('surveys') && <StatCard title="Pending Site Surveys" value={metrics?.pending_site_surveys || 0} icon={ClipboardCheck} color="accent" subtext="Awaiting technician visit" />}
+        {hasPermission('quotations') && <StatCard title="Approved Quotations" value={metrics?.approved_quotations || 0} icon={ShoppingCart} subtext="Quotations agreed by customer" />}
+        {hasPermission('orders') && <StatCard title="Confirmed Orders" value={metrics?.confirmed_orders || 0} icon={ShoppingCart} subtext="Active project lifecycle orders" />}
+        {hasPermission('installations') && <>
+          <StatCard title="Active Installations" value={metrics?.active_installations || 0} icon={Zap} color="accent" subtext="Field crews currently deployed" />
+          <StatCard title="Completed Projects" value={metrics?.completed_installations || 0} icon={CheckCircle} subtext="Signed customer acceptance" />
+        </>}
+        {hasPermission('inventory') && <>
+          {showFinance && <StatCard title="Inventory Valuation" value={`₹${(metrics?.inventory_valuation || 0).toLocaleString()}`} icon={Boxes} subtext="Current warehouse asset balance" />}
+          <StatCard title="Low-Stock Alerts" value={metrics?.low_stock_count || 0} icon={AlertTriangle} color="accent" subtext="Below configured reorder levels" />
+        </>}
+        {hasPermission('service') && <StatCard title="Open Service Tickets" value={metrics?.open_service_tickets || 0} icon={Headphones} subtext="After-sales maintenance & repairs" />}
+        {hasPermission('warranties') && <StatCard title="Active Warranties" value={metrics?.active_warranties || 0} icon={ShieldCheck} subtext="Equipment under active coverage" />}
       </div>
 
       {/* Analytical Charts Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', marginBottom: '24px' }}>
         {/* Monthly Revenue & Installation Trend */}
-        <div className="aarka-card">
+        {showFinance && <div className="aarka-card">
           <div className="aarka-card-header">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Revenue & Installation Activity</h3>
@@ -240,10 +265,10 @@ export const DashboardPage = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </div>}
 
         {/* Project Status Pie Chart */}
-        <div className="aarka-card">
+        {hasPermission('orders') && <div className="aarka-card">
           <div className="aarka-card-header">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Project Status Distribution</h3>
@@ -275,13 +300,13 @@ export const DashboardPage = () => {
               </PieChart>
             </ResponsiveContainer>
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Conversion Funnel & Operational Tables */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
         {/* Sales Conversion Funnel */}
-        <div className="aarka-card">
+        {hasPermission('leads') && <div className="aarka-card">
           <div className="aarka-card-header">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>End-to-End Sales Conversion Funnel</h3>
@@ -313,10 +338,10 @@ export const DashboardPage = () => {
               );
             })}
           </div>
-        </div>
+        </div>}
 
         {/* Recent Inquiries List */}
-        <div className="aarka-card">
+        {hasPermission('leads') && <div className="aarka-card">
           <div className="aarka-card-header">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Latest Customer Inquiries</h3>
@@ -353,13 +378,13 @@ export const DashboardPage = () => {
               </tbody>
             </table>
           </div>
-        </div>
+        </div>}
       </div>
 
       {/* Today's Operational Dispatches & Installations */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
         {/* Field Assignments */}
-        <div className="aarka-card">
+        {hasPermission('installations') && <div className="aarka-card">
           <div className="aarka-card-header">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Today's Scheduled Installations</h3>
@@ -397,10 +422,10 @@ export const DashboardPage = () => {
               </tbody>
             </table>
           </div>
-        </div>
+        </div>}
 
         {/* Low Stock Alerts */}
-        <div className="aarka-card">
+        {hasPermission('inventory') && <div className="aarka-card">
           <div className="aarka-card-header">
             <div>
               <h3 style={{ fontSize: '16px', fontWeight: '700' }}>Warehouse Inventory Alerts</h3>
@@ -442,7 +467,7 @@ export const DashboardPage = () => {
               </tbody>
             </table>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );

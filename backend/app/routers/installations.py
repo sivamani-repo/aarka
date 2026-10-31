@@ -14,9 +14,36 @@ from app.models.survey import Technician
 from app.models.inventory import SerializedEquipment
 from app.schemas.schemas import InstallationCreate, InstallationChecklistUpdate, InstallationComplete, InstallationOut
 from app.core.permissions import get_current_user
+from app.core.rbac import ASSIGN, canonical_role, has_permission
 from app.models.user import User
 
 router = APIRouter(prefix="/api/installations", tags=["Installation Operations"])
+
+
+def _scope_installations(query, current_user: User):
+    if canonical_role(current_user.role) == "Solar Technician":
+        return query.filter(InstallationJob.assigned_user_id == current_user.id)
+    return query
+
+
+def _resolve_install_assignee(db: Session, current_user: User, requested_id: Optional[int], technician: Technician):
+    if canonical_role(current_user.role) == "Solar Technician":
+        if requested_id not in (None, current_user.id):
+            raise HTTPException(status_code=403, detail="Technicians can only update their own installation assignments.")
+        return current_user.id
+    assigned_id = requested_id
+    if assigned_id is None and technician.email:
+        employee = db.query(User).filter(User.email.ilike(technician.email)).first()
+        if employee and canonical_role(employee.role) == "Solar Technician":
+            assigned_id = employee.id
+    if assigned_id is None:
+        return None
+    if not has_permission(db, current_user, "installations", ASSIGN):
+        raise HTTPException(status_code=403, detail="Installation assignment permission is required.")
+    employee = db.query(User).filter(User.id == assigned_id, User.is_active.is_(True)).first()
+    if not employee or canonical_role(employee.role) != "Solar Technician":
+        raise HTTPException(status_code=400, detail="Select an active Solar Technician.")
+    return employee.id
 
 
 @router.get("", response_model=List[InstallationOut])
@@ -26,7 +53,7 @@ def list_installations(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(InstallationJob)
+    query = _scope_installations(db.query(InstallationJob), current_user)
     if technician_id:
         query = query.filter(InstallationJob.technician_id == technician_id)
     if status and status != "ALL":
@@ -77,6 +104,7 @@ def schedule_installation(
     tech = db.query(Technician).filter(Technician.id == payload.technician_id).first()
     if not tech:
         raise HTTPException(status_code=404, detail="Technician not found")
+    assigned_user_id = _resolve_install_assignee(db, current_user, payload.assigned_user_id, tech)
 
     job_num = f"INST-2026-{random.randint(1000, 9999)}"
     while db.query(InstallationJob).filter(InstallationJob.job_number == job_num).first():
@@ -87,6 +115,7 @@ def schedule_installation(
         order_id=order.id,
         customer_id=order.customer_id,
         technician_id=tech.id,
+        assigned_user_id=assigned_user_id,
         scheduled_date=payload.scheduled_date,
         status="SCHEDULED",
         capacity_kw=payload.capacity_kw or order.capacity_kw,
@@ -118,7 +147,7 @@ def get_installation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    j = db.query(InstallationJob).filter(InstallationJob.id == job_id).first()
+    j = _scope_installations(db.query(InstallationJob), current_user).filter(InstallationJob.id == job_id).first()
     if not j:
         raise HTTPException(status_code=404, detail="Installation Job not found")
 
@@ -132,6 +161,7 @@ def get_installation(
         customer_phone=j.customer.phone if j.customer else None,
         customer_address=j.customer.address if j.customer else None,
         technician_id=j.technician_id,
+        assigned_user_id=j.assigned_user_id,
         technician_name=j.technician.name if j.technician else None,
         assigned_at=j.assigned_at,
         scheduled_date=j.scheduled_date,
@@ -157,7 +187,7 @@ def update_checklist(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    job = db.query(InstallationJob).filter(InstallationJob.id == job_id).first()
+    job = _scope_installations(db.query(InstallationJob), current_user).filter(InstallationJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Installation job not found")
 
@@ -182,7 +212,7 @@ async def upload_installation_photo(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    job = db.query(InstallationJob).filter(InstallationJob.id == job_id).first()
+    job = _scope_installations(db.query(InstallationJob), current_user).filter(InstallationJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Installation job not found")
 
@@ -214,7 +244,7 @@ def complete_installation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    job = db.query(InstallationJob).filter(InstallationJob.id == job_id).first()
+    job = _scope_installations(db.query(InstallationJob), current_user).filter(InstallationJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Installation job not found")
 
@@ -281,4 +311,3 @@ def complete_installation(
         "status": job.status,
         "activated_warranties_count": activated_count
     }
-

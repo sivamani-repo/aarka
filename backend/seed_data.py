@@ -4,8 +4,9 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal, engine, Base
 from app.core.security import get_password_hash
+from app.core.rbac import ROLE_DEPARTMENTS, seed_rbac_catalog
 import app.models
-from app.models.user import User
+from app.models.user import Department, User
 from app.models.survey import Technician, SiteSurvey
 from app.models.customer import Customer, Lead
 from app.models.product import Product, Package, BOMTemplate
@@ -26,29 +27,36 @@ def seed():
             return
 
         print("Seeding AARKA Solar Management System database...")
+        seed_rbac_catalog(db)
 
-        # 1. Users (7 Roles)
+        # 1. Sample employees across the configured roles
         users_data = [
-            ("Sivamani Dasari", "admin@aarka.com", "Director / Admin", "+91 98480 12345"),
-            ("Rajesh Sharma", "sales@aarka.com", "Sales Representative", "+91 98480 23456"),
-            ("Priya Nair", "survey@aarka.com", "Survey Technician", "+91 98480 34567"),
+            ("Sivamani Dasari", "admin@aarka.com", "Director / Super Admin", "+91 98480 12345"),
+            ("Rajesh Sharma", "sales@aarka.com", "Sales Executive", "+91 98480 23456"),
+            ("Priya Nair", "survey@aarka.com", "Site Survey Engineer", "+91 98480 34567"),
             ("Venkat Rao", "warehouse@aarka.com", "Warehouse Manager", "+91 98480 45678"),
-            ("Anand Kumar", "install@aarka.com", "Installation Technician", "+91 98480 56789"),
+            ("Anand Kumar", "install@aarka.com", "Solar Technician", "+91 98480 56789"),
             ("Kavita Reddy", "service@aarka.com", "Service Manager", "+91 98480 67890"),
             ("Suresh Gupta", "finance@aarka.com", "Finance Manager", "+91 98480 78901"),
         ]
         default_pwd_hash = get_password_hash("admin123")
         for name, email, role, phone in users_data:
+            department = db.query(Department).filter(
+                Department.name == ROLE_DEPARTMENTS[role]
+            ).one()
             user = User(
                 name=name,
                 email=email,
                 password_hash=default_pwd_hash,
                 role=role,
+                department_id=department.id,
                 phone=phone,
                 is_active=True,
                 is_verified=True
             )
             db.add(user)
+            db.flush()
+            user.employee_id = f"AARKA-EMP-{user.id:06d}"
         db.commit()
 
         # 2. 15 Technicians
@@ -495,4 +503,3 @@ def seed():
 
 if __name__ == "__main__":
     seed()
-

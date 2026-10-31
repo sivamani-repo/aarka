@@ -57,6 +57,7 @@ class Dispatch(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+    assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     delivery_reference = Column(String(80), unique=True, index=True, nullable=False)
     dispatch_date = Column(Date, nullable=True)
     delivery_date = Column(Date, nullable=True)
@@ -69,6 +70,7 @@ class Dispatch(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     order = relationship("SalesOrder")
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])
 
 
 class SerializedEquipment(Base):
@@ -95,4 +97,3 @@ class SerializedEquipment(Base):
     customer = relationship("Customer")
     order = relationship("SalesOrder")
     dispatch = relationship("Dispatch")
-

@@ -21,10 +21,78 @@ from app.schemas.schemas import (
 )
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.permissions import get_current_user, require_roles
+from app.core.rbac import (
+    ACTIONS,
+    DIRECTOR_ROLES,
+    ROLE_DEPARTMENTS,
+    RESOURCES,
+    canonical_role,
+    effective_permissions,
+)
 from app.core.email import send_verification_email, send_password_reset_email
 from app.config import settings
+from app.models.user import Department, UserPermission
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication & Team"])
+
+
+def _serialize_user(user: User, db: Session) -> dict:
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "role": canonical_role(user.role),
+        "phone": user.phone,
+        "is_active": user.is_active,
+        "is_verified": user.is_verified,
+        "created_at": user.created_at,
+        "employee_id": user.employee_id,
+        "department": user.department_name,
+        "reporting_manager_id": user.reporting_manager_id,
+        "permissions": effective_permissions(db, user),
+        "additional_permissions": [
+            {"resource": grant.resource, "action": grant.action}
+            for grant in db.query(UserPermission).filter(UserPermission.user_id == user.id).all()
+        ],
+    }
+
+
+def _permission_pairs(values: List[str]) -> set[tuple[str, str]]:
+    allowed_resources = set(RESOURCES)
+    allowed_actions = set(ACTIONS)
+    pairs = set()
+    for value in values:
+        resource, separator, action = value.partition(":")
+        resource = resource.strip().lower()
+        action = action.strip().upper()
+        if not separator or resource not in allowed_resources or action not in allowed_actions:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid permission '{value}'. Use a valid resource:ACTION pair.",
+            )
+        pairs.add((resource, action))
+    return pairs
+
+
+def _validate_reporting_manager(db: Session, manager_id: Optional[int], user_id: Optional[int] = None):
+    if manager_id is None:
+        return
+    if manager_id == user_id:
+        raise HTTPException(status_code=400, detail="An employee cannot report to themselves.")
+    manager = db.query(User).filter(User.id == manager_id, User.is_active.is_(True)).first()
+    if manager is None:
+        raise HTTPException(status_code=404, detail="Reporting manager not found or inactive.")
+    canonical_manager_role = canonical_role(manager.role)
+    if canonical_manager_role not in DIRECTOR_ROLES and not canonical_manager_role.endswith("Manager"):
+        raise HTTPException(status_code=400, detail="Reporting manager must be a manager or director.")
+
+
+def _ensure_director_remains_active(db: Session, user: User, is_active: Optional[bool]):
+    if is_active is not False or canonical_role(user.role) != "Director / Super Admin" or not user.is_active:
+        return
+    active_directors = db.query(User).filter(User.is_active.is_(True)).all()
+    if sum(canonical_role(candidate.role) == "Director / Super Admin" for candidate in active_directors) <= 1:
+        raise HTTPException(status_code=400, detail="At least one active Director / Super Admin must remain.")
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -198,14 +266,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "role": user.role,
-            "phone": user.phone,
-            "is_verified": user.is_verified
-        }
+        "user": _serialize_user(user, db),
     }
 
 
@@ -306,14 +367,7 @@ def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
     return {
         "access_token": token,
         "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "role": user.role,
-            "phone": user.phone,
-            "is_verified": user.is_verified
-        }
+        "user": _serialize_user(user, db),
     }
 
 
@@ -390,8 +444,34 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
 # ================= PROFILE & ADMIN STAFF MANAGEMENT =================
 
 @router.get("/me", response_model=UserOut)
-def get_profile(current_user: User = Depends(get_current_user)):
-    return current_user
+def get_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return _serialize_user(current_user, db)
+
+
+@router.get("/roles")
+def list_roles(db: Session = Depends(get_db)):
+    from app.models.user import Role
+
+    return [
+        {
+            "name": role.name,
+            "department": role.department.name if role.department else None,
+            "description": role.description,
+        }
+        for role in db.query(Role).order_by(Role.name.asc()).all()
+    ]
+
+
+@router.get("/permissions")
+def list_permissions():
+    return [
+        {"resource": resource, "action": action}
+        for resource in RESOURCES
+        for action in ACTIONS
+    ]
 
 
 @router.get("/users", response_model=List[UserOut])
@@ -399,37 +479,49 @@ def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    users = db.query(User).order_by(User.id.asc()).all()
-    return users
+    users = db.query(User).filter(User.role != "Customer").order_by(User.id.asc()).all()
+    return [_serialize_user(user, db) for user in users]
 
 
 @router.post("/users", response_model=UserOut)
 def create_staff_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["Director / Admin"]))
+    current_user: User = Depends(require_roles(["Director / Admin", "Director / Super Admin"]))
 ):
-    """
-    Admin-controlled staff creation.
-    - Restricted to Director / Admin.
-    - Sets is_verified = True so internal staff can access their workspace immediately.
-    """
+    if payload.role not in ROLE_DEPARTMENTS:
+        raise HTTPException(status_code=422, detail="Select one of the configured AARKA employee roles.")
     clean_email = payload.email.lower().strip()
     existing = db.query(User).filter(User.email == clean_email).first()
     if existing:
         raise HTTPException(status_code=400, detail="User with this email already exists")
 
+    _validate_reporting_manager(db, payload.reporting_manager_id)
     hashed = get_password_hash(payload.password)
+    department = db.query(Department).filter(
+        Department.name == ROLE_DEPARTMENTS[payload.role]
+    ).one()
     user = User(
         name=payload.name.strip(),
         email=clean_email,
         password_hash=hashed,
         role=payload.role,
+        department_id=department.id,
+        reporting_manager_id=payload.reporting_manager_id,
         phone=payload.phone.strip() if payload.phone else None,
         is_active=True,
-        is_verified=True  # Pre-verified by administrator
+        is_verified=True,
     )
     db.add(user)
+    db.flush()
+    user.employee_id = f"AARKA-EMP-{user.id:06d}"
+    for resource, action in _permission_pairs(payload.permissions):
+        db.add(UserPermission(
+            user_id=user.id,
+            resource=resource,
+            action=action,
+            granted_by=current_user.id,
+        ))
     db.commit()
     db.refresh(user)
 
@@ -443,7 +535,7 @@ def create_staff_user(
     db.add(audit)
     db.commit()
 
-    return user
+    return _serialize_user(user, db)
 
 
 @router.put("/users/{user_id}", response_model=UserOut)
@@ -451,23 +543,61 @@ def update_user(
     user_id: int,
     payload: UserUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles(["Director / Admin"]))
+    current_user: User = Depends(require_roles(["Director / Admin", "Director / Super Admin"]))
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    if user.id == current_user.id and (
+        payload.role is not None or payload.permissions is not None or payload.is_active is False
+    ):
+        raise HTTPException(status_code=400, detail="You cannot change your own role, permissions, or account status.")
+    if payload.role is not None and payload.role not in ROLE_DEPARTMENTS:
+        raise HTTPException(status_code=422, detail="Select one of the configured AARKA employee roles.")
+    if payload.email is not None:
+        clean_email = payload.email.lower().strip()
+        duplicate = db.query(User).filter(User.email == clean_email, User.id != user.id).first()
+        if duplicate:
+            raise HTTPException(status_code=400, detail="User with this email already exists.")
+        user.email = clean_email
+    _validate_reporting_manager(db, payload.reporting_manager_id, user.id)
+    _ensure_director_remains_active(db, user, payload.is_active)
+
     if payload.name is not None:
         user.name = payload.name.strip()
-    if payload.email is not None:
-        user.email = payload.email.lower().strip()
     if payload.role is not None:
         user.role = payload.role
+        department = db.query(Department).filter(
+            Department.name == ROLE_DEPARTMENTS[payload.role]
+        ).one()
+        user.department_id = department.id
+    if "reporting_manager_id" in payload.model_fields_set:
+        user.reporting_manager_id = payload.reporting_manager_id
     if payload.phone is not None:
         user.phone = payload.phone.strip()
     if payload.is_active is not None:
         user.is_active = payload.is_active
 
+    if payload.permissions is not None:
+        db.query(UserPermission).filter(UserPermission.user_id == user.id).delete()
+        for resource, action in _permission_pairs(payload.permissions):
+            db.add(UserPermission(
+                user_id=user.id,
+                resource=resource,
+                action=action,
+                granted_by=current_user.id,
+            ))
+
     db.commit()
     db.refresh(user)
-    return user
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="UPDATE_STAFF_USER",
+        entity_type="USER",
+        entity_id=user.id,
+        details=f"Admin {current_user.email} updated staff account {user.email}",
+    )
+    db.add(audit)
+    db.commit()
+    return _serialize_user(user, db)

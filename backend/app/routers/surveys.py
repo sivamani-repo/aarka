@@ -13,9 +13,31 @@ from app.models.survey import SiteSurvey, Technician
 from app.models.customer import Customer, Lead
 from app.schemas.schemas import SurveyCreate, SurveyUpdate, SurveyApprove, SurveyOut
 from app.core.permissions import get_current_user
+from app.core.rbac import ASSIGN, canonical_role, has_permission
 from app.models.user import User
 
 router = APIRouter(prefix="/api/surveys", tags=["Site Surveys"])
+
+
+def _scope_surveys(query, current_user: User):
+    if canonical_role(current_user.role) == "Site Survey Engineer":
+        return query.filter(SiteSurvey.assigned_user_id == current_user.id)
+    return query
+
+
+def _resolve_survey_assignee(db: Session, current_user: User, requested_id: Optional[int]):
+    if canonical_role(current_user.role) == "Site Survey Engineer":
+        if requested_id not in (None, current_user.id):
+            raise HTTPException(status_code=403, detail="Survey engineers can only assign surveys to themselves.")
+        return current_user.id
+    if requested_id is None:
+        return None
+    if not has_permission(db, current_user, "surveys", ASSIGN):
+        raise HTTPException(status_code=403, detail="Survey assignment permission is required.")
+    assignee = db.query(User).filter(User.id == requested_id, User.is_active.is_(True)).first()
+    if not assignee or canonical_role(assignee.role) != "Site Survey Engineer":
+        raise HTTPException(status_code=400, detail="Select an active Site Survey Engineer.")
+    return assignee.id
 
 
 @router.get("", response_model=List[SurveyOut])
@@ -26,7 +48,7 @@ def list_surveys(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(SiteSurvey)
+    query = _scope_surveys(db.query(SiteSurvey), current_user)
     if status and status != "ALL":
         query = query.filter(SiteSurvey.status == status)
     if approval_status and approval_status != "ALL":
@@ -43,6 +65,7 @@ def list_surveys(
             lead_id=s.lead_id,
             customer_id=s.customer_id,
             technician_id=s.technician_id,
+            assigned_user_id=s.assigned_user_id,
             scheduled_date=s.scheduled_date,
             actual_survey_date=s.actual_survey_date,
             roof_area=s.roof_area,
@@ -77,9 +100,28 @@ def schedule_survey(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+    customer_query = db.query(Customer).filter(Customer.id == payload.customer_id)
+    if canonical_role(current_user.role) == "Site Survey Engineer":
+        assigned_customers = db.query(SiteSurvey.customer_id).filter(
+            SiteSurvey.assigned_user_id == current_user.id
+        )
+        customer_query = customer_query.filter(Customer.id.in_(assigned_customers))
+    customer = customer_query.first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    lead = None
+    if payload.lead_id:
+        lead = db.query(Lead).filter(Lead.id == payload.lead_id).first()
+        if not lead:
+            raise HTTPException(status_code=404, detail="Lead not found")
+        if lead.customer_id is not None and lead.customer_id != customer.id:
+            raise HTTPException(status_code=400, detail="The selected lead does not belong to this customer.")
+    assigned_user_id = _resolve_survey_assignee(db, current_user, payload.assigned_user_id)
+    if payload.technician_id is not None:
+        if not has_permission(db, current_user, "surveys", ASSIGN):
+            raise HTTPException(status_code=403, detail="Survey assignment permission is required.")
+        if not db.query(Technician).filter(Technician.id == payload.technician_id).first():
+            raise HTTPException(status_code=404, detail="Technician not found")
 
     survey_ref = f"SURV-2026-{random.randint(100, 999)}"
     while db.query(SiteSurvey).filter(SiteSurvey.survey_reference == survey_ref).first():
@@ -90,6 +132,7 @@ def schedule_survey(
         lead_id=payload.lead_id,
         customer_id=customer.id,
         technician_id=payload.technician_id,
+        assigned_user_id=assigned_user_id,
         scheduled_date=payload.scheduled_date,
         required_capacity_kw=payload.required_capacity_kw,
         monthly_bill=payload.monthly_bill or customer.monthly_bill,
@@ -100,11 +143,9 @@ def schedule_survey(
     )
     db.add(survey)
 
-    if payload.lead_id:
-        lead = db.query(Lead).filter(Lead.id == payload.lead_id).first()
-        if lead:
-            lead.stage = "SURVEY_SCHEDULED"
-            lead.notes = f"{lead.notes or ''}\nSurvey scheduled for {payload.scheduled_date} ({survey_ref})".strip()
+    if lead:
+        lead.stage = "SURVEY_SCHEDULED"
+        lead.notes = f"{lead.notes or ''}\nSurvey scheduled for {payload.scheduled_date} ({survey_ref})".strip()
 
     db.commit()
     db.refresh(survey)
@@ -115,6 +156,7 @@ def schedule_survey(
         lead_id=survey.lead_id,
         customer_id=survey.customer_id,
         technician_id=survey.technician_id,
+        assigned_user_id=survey.assigned_user_id,
         scheduled_date=survey.scheduled_date,
         actual_survey_date=survey.actual_survey_date,
         roof_area=survey.roof_area,
@@ -147,7 +189,7 @@ def get_survey(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    s = db.query(SiteSurvey).filter(SiteSurvey.id == survey_id).first()
+    s = _scope_surveys(db.query(SiteSurvey), current_user).filter(SiteSurvey.id == survey_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Survey not found")
 
@@ -157,6 +199,7 @@ def get_survey(
         lead_id=s.lead_id,
         customer_id=s.customer_id,
         technician_id=s.technician_id,
+        assigned_user_id=s.assigned_user_id,
         scheduled_date=s.scheduled_date,
         actual_survey_date=s.actual_survey_date,
         roof_area=s.roof_area,
@@ -190,10 +233,19 @@ def update_survey(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    s = db.query(SiteSurvey).filter(SiteSurvey.id == survey_id).first()
+    s = _scope_surveys(db.query(SiteSurvey), current_user).filter(SiteSurvey.id == survey_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Survey not found")
 
+    if "assigned_user_id" in payload.model_fields_set:
+        s.assigned_user_id = _resolve_survey_assignee(db, current_user, payload.assigned_user_id)
+    if payload.technician_id is not None:
+        if not has_permission(db, current_user, "surveys", ASSIGN):
+            raise HTTPException(status_code=403, detail="Survey assignment permission is required.")
+        if not db.query(Technician).filter(Technician.id == payload.technician_id).first():
+            raise HTTPException(status_code=404, detail="Technician not found")
+    if payload.technician_id is not None and not has_permission(db, current_user, "surveys", ASSIGN):
+        raise HTTPException(status_code=403, detail="Survey assignment permission is required.")
     if payload.technician_id is not None:
         s.technician_id = payload.technician_id
     if payload.actual_survey_date is not None:
@@ -230,6 +282,7 @@ def update_survey(
         lead_id=s.lead_id,
         customer_id=s.customer_id,
         technician_id=s.technician_id,
+        assigned_user_id=s.assigned_user_id,
         scheduled_date=s.scheduled_date,
         actual_survey_date=s.actual_survey_date,
         roof_area=s.roof_area,
@@ -263,7 +316,7 @@ def approve_or_reject_survey(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    s = db.query(SiteSurvey).filter(SiteSurvey.id == survey_id).first()
+    s = _scope_surveys(db.query(SiteSurvey), current_user).filter(SiteSurvey.id == survey_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Survey not found")
 
@@ -296,6 +349,7 @@ def approve_or_reject_survey(
         lead_id=s.lead_id,
         customer_id=s.customer_id,
         technician_id=s.technician_id,
+        assigned_user_id=s.assigned_user_id,
         scheduled_date=s.scheduled_date,
         actual_survey_date=s.actual_survey_date,
         roof_area=s.roof_area,
@@ -329,7 +383,7 @@ async def upload_survey_photo(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    s = db.query(SiteSurvey).filter(SiteSurvey.id == survey_id).first()
+    s = _scope_surveys(db.query(SiteSurvey), current_user).filter(SiteSurvey.id == survey_id).first()
     if not s:
         raise HTTPException(status_code=404, detail="Survey not found")
 
@@ -352,4 +406,3 @@ async def upload_survey_photo(
     db.commit()
 
     return {"success": True, "url": rel_url, "all_photos": current_photos}
-

@@ -1,10 +1,11 @@
 import os
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.database import Base, engine
 import app.models
+from app.core.rbac import authorize_api_request
 
 from app.routers import (
     auth,
@@ -43,7 +44,8 @@ app = FastAPI(
     description="Solar Operations, Simplified — Enterprise Backend for Solar Installation Operations",
     version="2.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    dependencies=[Depends(authorize_api_request)],
 )
 
 # Enable CORS for Vite frontend
@@ -84,12 +86,12 @@ app.include_router(uploads.router)
 @app.on_event("startup")
 def on_startup():
     from app.database import SessionLocal
+    from app.core.rbac import seed_rbac_catalog
     from app.core.subsidy_seed import seed_government_schemes_and_rules
     db = SessionLocal()
     try:
+        seed_rbac_catalog(db)
         seed_government_schemes_and_rules(db)
-    except Exception as e:
-        print(f"Warning during subsidy scheme seeding: {e}")
     finally:
         db.close()
 

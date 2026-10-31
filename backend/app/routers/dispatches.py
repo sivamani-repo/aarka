@@ -12,9 +12,27 @@ from app.models.installation import InstallationJob
 from app.models.service import WarrantyRecord
 from app.schemas.schemas import DispatchCreate, DispatchConfirmDelivery, DispatchOut
 from app.core.permissions import get_current_user
+from app.core.rbac import ASSIGN, canonical_role, has_permission
 from app.models.user import User
 
 router = APIRouter(prefix="/api/dispatches", tags=["Warehouse Dispatch & Delivery"])
+
+
+def _scope_dispatches(query, current_user: User):
+    if canonical_role(current_user.role) == "Dispatch Staff":
+        return query.filter(Dispatch.assigned_user_id == current_user.id)
+    return query
+
+
+def _resolve_dispatch_assignee(db: Session, current_user: User, requested_id: Optional[int]):
+    if requested_id is None:
+        return None
+    if not has_permission(db, current_user, "dispatches", ASSIGN):
+        raise HTTPException(status_code=403, detail="Dispatch assignment permission is required.")
+    assignee = db.query(User).filter(User.id == requested_id, User.is_active.is_(True)).first()
+    if not assignee or canonical_role(assignee.role) != "Dispatch Staff":
+        raise HTTPException(status_code=400, detail="Select an active Dispatch Staff employee.")
+    return assignee.id
 
 
 @router.get("", response_model=List[DispatchOut])
@@ -24,7 +42,7 @@ def list_dispatches(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(Dispatch)
+    query = _scope_dispatches(db.query(Dispatch), current_user)
     if order_id:
         query = query.filter(Dispatch.order_id == order_id)
     if status and status != "ALL":
@@ -36,6 +54,7 @@ def list_dispatches(
         results.append(DispatchOut(
             id=d.id,
             order_id=d.order_id,
+            assigned_user_id=d.assigned_user_id,
             order_number=d.order.order_number if d.order else None,
             customer_id=d.order.customer_id if d.order else None,
             customer_name=d.order.customer.name if (d.order and d.order.customer) else None,
@@ -62,6 +81,7 @@ def create_dispatch(
     order = db.query(SalesOrder).filter(SalesOrder.id == payload.order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    assigned_user_id = _resolve_dispatch_assignee(db, current_user, payload.assigned_user_id)
 
     # CRITICAL BUSINESS RULE #7: Mandatory materials & serialized items must not be missing
     serialized_order_items = [it for it in order.items if it.is_serialized]
@@ -85,6 +105,7 @@ def create_dispatch(
     deliv_ref = payload.delivery_reference or f"DISP-2026-{random.randint(1000, 9999)}"
     dispatch = Dispatch(
         order_id=order.id,
+        assigned_user_id=assigned_user_id,
         delivery_reference=deliv_ref,
         dispatch_date=payload.dispatch_date or date.today(),
         status="DISPATCHED",
@@ -132,6 +153,7 @@ def create_dispatch(
     return DispatchOut(
         id=dispatch.id,
         order_id=dispatch.order_id,
+        assigned_user_id=dispatch.assigned_user_id,
         order_number=order.order_number,
         customer_id=order.customer_id,
         customer_name=order.customer.name if order.customer else None,
@@ -155,7 +177,7 @@ def confirm_delivery(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    dispatch = db.query(Dispatch).filter(Dispatch.id == dispatch_id).first()
+    dispatch = _scope_dispatches(db.query(Dispatch), current_user).filter(Dispatch.id == dispatch_id).first()
     if not dispatch:
         raise HTTPException(status_code=404, detail="Dispatch not found")
 
@@ -258,4 +280,3 @@ def confirm_delivery(
         "delivery_date": payload.delivery_date,
         "activated_warranties": activated_warranties
     }
-

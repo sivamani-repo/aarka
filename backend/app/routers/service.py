@@ -14,9 +14,31 @@ from app.models.survey import Technician
 from app.models.finance import ProjectExpense
 from app.schemas.schemas import ServiceTicketCreate, ServiceTicketUpdate, ServiceTicketReplaceEquipment, ServiceTicketOut
 from app.core.permissions import get_current_user
+from app.core.rbac import ASSIGN, canonical_role, has_permission
 from app.models.user import User
 
 router = APIRouter(prefix="/api/service", tags=["After-Sales & Service Tickets"])
+
+
+def _scope_tickets(query, current_user: User):
+    if canonical_role(current_user.role) == "Support Executive":
+        return query.filter(ServiceTicket.assigned_user_id == current_user.id)
+    return query
+
+
+def _resolve_support_assignee(db: Session, current_user: User, requested_id: Optional[int]):
+    if canonical_role(current_user.role) == "Support Executive":
+        if requested_id not in (None, current_user.id):
+            raise HTTPException(status_code=403, detail="Support executives can only own their assigned tickets.")
+        return current_user.id
+    if requested_id is None:
+        return None
+    if not has_permission(db, current_user, "service", ASSIGN):
+        raise HTTPException(status_code=403, detail="Service assignment permission is required.")
+    assignee = db.query(User).filter(User.id == requested_id, User.is_active.is_(True)).first()
+    if not assignee or canonical_role(assignee.role) != "Support Executive":
+        raise HTTPException(status_code=400, detail="Select an active Support Executive.")
+    return assignee.id
 
 
 @router.get("/tickets", response_model=List[ServiceTicketOut])
@@ -27,7 +49,7 @@ def list_tickets(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(ServiceTicket)
+    query = _scope_tickets(db.query(ServiceTicket), current_user)
     if status and status != "ALL":
         query = query.filter(ServiceTicket.status == status)
     if priority and priority != "ALL":
@@ -42,6 +64,7 @@ def list_tickets(
             id=t.id,
             ticket_number=t.ticket_number,
             customer_id=t.customer_id,
+            assigned_user_id=t.assigned_user_id,
             customer_name=t.customer.name if t.customer else None,
             customer_phone=t.customer.phone if t.customer else None,
             customer_address=t.customer.address if t.customer else None,
@@ -79,9 +102,13 @@ def create_service_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    customer = db.query(Customer).filter(Customer.id == payload.customer_id).first()
+    customer_query = db.query(Customer).filter(Customer.id == payload.customer_id)
+    if canonical_role(current_user.role) == "Support Executive":
+        customer_query = customer_query.filter(Customer.assigned_user_id == current_user.id)
+    customer = customer_query.first()
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
+    assigned_user_id = _resolve_support_assignee(db, current_user, payload.assigned_user_id)
 
     clean_sn = (payload.serial_number or payload.reported_serial_number or "").strip().upper()
     fault_desc = payload.fault_description or payload.description or payload.title or "Equipment fault reported"
@@ -119,6 +146,7 @@ def create_service_ticket(
     ticket = ServiceTicket(
         ticket_number=tkt_num,
         customer_id=customer.id,
+        assigned_user_id=assigned_user_id,
         serial_number=clean_sn,
         equipment_type=ser.product.name if (ser and ser.product) else "Solar Inverter",
         installation_id=payload.installation_id or (ser.installation_id if ser else None),
@@ -157,6 +185,7 @@ def create_service_ticket(
         id=ticket.id,
         ticket_number=ticket.ticket_number,
         customer_id=ticket.customer_id,
+        assigned_user_id=ticket.assigned_user_id,
         customer_name=customer.name,
         customer_phone=customer.phone,
         customer_address=customer.address,
@@ -195,12 +224,16 @@ def update_service_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ticket = db.query(ServiceTicket).filter(ServiceTicket.id == ticket_id).first()
+    ticket = _scope_tickets(db.query(ServiceTicket), current_user).filter(ServiceTicket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Service ticket not found")
 
+    if payload.technician_id is not None and not has_permission(db, current_user, "service", ASSIGN):
+        raise HTTPException(status_code=403, detail="Service assignment permission is required.")
     if payload.technician_id is not None:
         ticket.technician_id = payload.technician_id
+    if "assigned_user_id" in payload.model_fields_set:
+        ticket.assigned_user_id = _resolve_support_assignee(db, current_user, payload.assigned_user_id)
         if ticket.status == "OPEN":
             ticket.status = "ASSIGNED"
     if payload.diagnosis is not None:
@@ -234,6 +267,7 @@ def update_service_ticket(
         id=ticket.id,
         ticket_number=ticket.ticket_number,
         customer_id=ticket.customer_id,
+        assigned_user_id=ticket.assigned_user_id,
         customer_name=ticket.customer.name if ticket.customer else None,
         customer_phone=ticket.customer.phone if ticket.customer else None,
         customer_address=ticket.customer.address if ticket.customer else None,
@@ -272,7 +306,7 @@ def replace_defective_equipment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ticket = db.query(ServiceTicket).filter(ServiceTicket.id == ticket_id).first()
+    ticket = _scope_tickets(db.query(ServiceTicket), current_user).filter(ServiceTicket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Service ticket not found")
 
@@ -326,7 +360,7 @@ def resolve_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ticket = db.query(ServiceTicket).filter(ServiceTicket.id == ticket_id).first()
+    ticket = _scope_tickets(db.query(ServiceTicket), current_user).filter(ServiceTicket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Service ticket not found")
 
@@ -342,7 +376,7 @@ def confirm_and_close_ticket(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    ticket = db.query(ServiceTicket).filter(ServiceTicket.id == ticket_id).first()
+    ticket = _scope_tickets(db.query(ServiceTicket), current_user).filter(ServiceTicket.id == ticket_id).first()
     if not ticket:
         raise HTTPException(status_code=404, detail="Service ticket not found")
 
@@ -350,4 +384,3 @@ def confirm_and_close_ticket(
     ticket.status = "CLOSED"
     db.commit()
     return {"success": True, "message": f"Customer confirmation recorded. Ticket {ticket.ticket_number} is now CLOSED."}
-

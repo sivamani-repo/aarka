@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Shield, Mail, Phone, CheckCircle, Search, UserCheck } from 'lucide-react';
+import { Users, Plus, Shield, Mail, Phone, Search, UserCheck, Pencil, UserX, UserRoundCheck } from 'lucide-react';
 import { authApi } from '../../services/api';
 import StatCard from '../../components/common/StatCard';
 import DataTable from '../../components/common/DataTable';
@@ -7,26 +7,37 @@ import Modal from '../../components/common/Modal';
 
 export default function TeamPage() {
   const [users, setUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [permissionOptions, setPermissionOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
   const [feedback, setFeedback] = useState(null);
 
   const [form, setForm] = useState({
     name: '',
     email: '',
     password: '',
-    role: 'Sales Representative',
-    phone: ''
+    role: 'Sales Executive',
+    phone: '',
+    reporting_manager_id: '',
+    permissions: [],
   });
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const res = await authApi.getUsers();
-      setUsers(res.data);
+      const [usersResponse, rolesResponse, permissionsResponse] = await Promise.all([
+        authApi.getUsers(),
+        authApi.getRoles(),
+        authApi.getPermissions(),
+      ]);
+      setUsers(usersResponse.data);
+      setRoles(rolesResponse.data);
+      setPermissionOptions(permissionsResponse.data);
     } catch (err) {
-      console.error(err);
+      setFeedback({ type: 'error', msg: err.response?.data?.detail || 'Could not load employee administration data.' });
     } finally {
       setLoading(false);
     }
@@ -39,15 +50,73 @@ export default function TeamPage() {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
-      await authApi.createUser(form);
-      setFeedback({ type: 'success', msg: `Team member ${form.name} created successfully.` });
+      if (editingUser) {
+        await authApi.updateUser(editingUser.id, {
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          phone: form.phone,
+          reporting_manager_id: form.reporting_manager_id ? Number(form.reporting_manager_id) : null,
+          permissions: form.permissions,
+        });
+      } else {
+        await authApi.createUser({
+          ...form,
+          reporting_manager_id: form.reporting_manager_id ? Number(form.reporting_manager_id) : null,
+        });
+      }
+      setFeedback({
+        type: 'success',
+        msg: `Team member ${form.name} ${editingUser ? 'updated' : 'created'} successfully.`,
+      });
       setShowModal(false);
-      setForm({ name: '', email: '', password: '', role: 'Sales Representative', phone: '' });
+      setEditingUser(null);
+      setForm({
+        name: '',
+        email: '',
+        password: '',
+        role: 'Sales Executive',
+        phone: '',
+        reporting_manager_id: '',
+        permissions: [],
+      });
       fetchUsers();
     } catch (err) {
-      setFeedback({ type: 'error', msg: err.response?.data?.detail || 'Failed to create user' });
+      setFeedback({ type: 'error', msg: err.response?.data?.detail || `Failed to ${editingUser ? 'update' : 'create'} employee.` });
     }
   };
+
+  const openEditUser = (employee) => {
+    setEditingUser(employee);
+    setForm({
+      name: employee.name || '',
+      email: employee.email || '',
+      password: '',
+      role: employee.role,
+      phone: employee.phone || '',
+      reporting_manager_id: employee.reporting_manager_id ? String(employee.reporting_manager_id) : '',
+      permissions: (employee.additional_permissions || []).map(({ resource, action }) => `${resource}:${action}`),
+    });
+    setShowModal(true);
+  };
+
+  const toggleAccountStatus = async (employee) => {
+    try {
+      await authApi.updateUser(employee.id, { is_active: !employee.is_active });
+      setFeedback({ type: 'success', msg: `${employee.name}'s account is now ${employee.is_active ? 'deactivated' : 'active'}.` });
+      fetchUsers();
+    } catch (err) {
+      setFeedback({ type: 'error', msg: err.response?.data?.detail || 'Could not update the account status.' });
+    }
+  };
+
+  const managers = users.filter((employee) =>
+    employee.role === 'Director / Super Admin' || employee.role.endsWith('Manager')
+  );
+  const permissionsByResource = permissionOptions.reduce((groups, permission) => {
+    groups[permission.resource] = [...(groups[permission.resource] || []), permission.action];
+    return groups;
+  }, {});
 
   const filtered = users.filter(u =>
     u.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -62,6 +131,9 @@ export default function TeamPage() {
       cell: (row) => (
         <div>
           <div className="font-semibold text-stone-900">{row.name}</div>
+          <div className="text-xs text-emerald-800 font-medium mt-0.5">
+            {row.employee_id || 'Employee ID pending'}
+          </div>
           <div className="text-xs text-stone-500 flex items-center gap-2 mt-0.5">
             <span className="flex items-center gap-1"><Mail className="w-3 h-3 text-stone-400" /> {row.email}</span>
             {row.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3 text-stone-400" /> {row.phone}</span>}
@@ -74,13 +146,13 @@ export default function TeamPage() {
       accessor: 'role',
       cell: (row) => {
         let badgeColor = 'bg-stone-100 text-stone-700';
-        if (row.role === 'Director / Admin') badgeColor = 'bg-emerald-900 text-emerald-100';
-        else if (row.role === 'Sales Representative') badgeColor = 'bg-blue-100 text-blue-800';
-        else if (row.role === 'Site Surveyor') badgeColor = 'bg-teal-100 text-teal-800';
+        if (row.role === 'Director / Super Admin') badgeColor = 'bg-emerald-900 text-emerald-100';
+        else if (row.role === 'Sales Executive' || row.role === 'Sales Manager') badgeColor = 'bg-blue-100 text-blue-800';
+        else if (row.role === 'Site Survey Engineer') badgeColor = 'bg-teal-100 text-teal-800';
         else if (row.role === 'Warehouse Manager') badgeColor = 'bg-amber-100 text-amber-900';
-        else if (row.role === 'Installation Engineer') badgeColor = 'bg-emerald-100 text-emerald-800';
-        else if (row.role === 'Service Coordinator') badgeColor = 'bg-indigo-100 text-indigo-800';
-        else if (row.role === 'Finance / Accounts') badgeColor = 'bg-purple-100 text-purple-800';
+        else if (row.role === 'Installation Manager' || row.role === 'Solar Technician') badgeColor = 'bg-emerald-100 text-emerald-800';
+        else if (row.role === 'Service Manager' || row.role === 'Support Executive') badgeColor = 'bg-indigo-100 text-indigo-800';
+        else if (row.role === 'Finance Manager') badgeColor = 'bg-purple-100 text-purple-800';
 
         return (
           <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full font-medium ${badgeColor}`}>
@@ -89,6 +161,11 @@ export default function TeamPage() {
           </span>
         );
       }
+    },
+    {
+      header: 'Department',
+      accessor: 'department',
+      cell: (row) => <span className="text-sm text-stone-700">{row.department || '—'}</span>,
     },
     {
       header: 'Account Status',
@@ -110,6 +187,30 @@ export default function TeamPage() {
           {new Date(row.created_at).toLocaleDateString()}
         </span>
       )
+    },
+    {
+      header: 'Manage',
+      accessor: 'id',
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => openEditUser(row)}
+            title={`Edit ${row.name}`}
+          >
+            <Pencil size={14} /> Edit
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => toggleAccountStatus(row)}
+            title={row.is_active ? 'Deactivate employee' : 'Reactivate employee'}
+          >
+            {row.is_active ? <UserX size={14} /> : <UserRoundCheck size={14} />}
+          </button>
+        </div>
+      )
     }
   ];
 
@@ -124,7 +225,19 @@ export default function TeamPage() {
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={() => {
+            setEditingUser(null);
+            setForm({
+              name: '',
+              email: '',
+              password: '',
+              role: 'Sales Executive',
+              phone: '',
+              reporting_manager_id: '',
+              permissions: [],
+            });
+            setShowModal(true);
+          }}
           className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -145,7 +258,7 @@ export default function TeamPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Total Staff" value={users.length} icon={Users} subtitle="Registered platform users" />
         <StatCard title="Active Accounts" value={users.filter(u => u.is_active).length} icon={UserCheck} subtitle="Authorized for sign-in" />
-        <StatCard title="Departments" value="7 Roles" icon={Shield} subtitle="Strict RBAC segregation" />
+        <StatCard title="Departments & Roles" value={`${new Set(roles.map((role) => role.department)).size} / ${roles.length}`} icon={Shield} subtitle="Configured departments and job roles" />
       </div>
 
       {/* Search */}
@@ -172,8 +285,11 @@ export default function TeamPage() {
       {/* Add User Modal */}
       <Modal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        title="Create Team Member Account"
+        onClose={() => {
+          setShowModal(false);
+          setEditingUser(null);
+        }}
+        title={editingUser ? 'Update Employee Profile' : 'Create Employee Account'}
       >
         <form onSubmit={handleCreateUser} className="space-y-4">
           <div>
@@ -220,27 +336,81 @@ export default function TeamPage() {
                 onChange={(e) => setForm({ ...form, role: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none bg-white"
               >
-                <option value="Director / Admin">Director / Admin</option>
-                <option value="Sales Representative">Sales Representative</option>
-                <option value="Site Surveyor">Site Surveyor</option>
-                <option value="Warehouse Manager">Warehouse Manager</option>
-                <option value="Installation Engineer">Installation Engineer</option>
-                <option value="Service Coordinator">Service Coordinator</option>
-                <option value="Finance / Accounts">Finance / Accounts</option>
+                {roles.map((role) => (
+                  <option value={role.name} key={role.name}>{role.name}</option>
+                ))}
               </select>
+              <span className="mt-1 block text-xs text-stone-500">
+                Department: {roles.find((role) => role.name === form.role)?.department || 'Select a role'}
+              </span>
             </div>
             <div>
-              <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">Initial Password *</label>
+              <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">
+                {editingUser ? 'Set new password separately' : 'Initial Password *'}
+              </label>
               <input
                 type="password"
-                required
-                placeholder="••••••••"
+                required={!editingUser}
+                disabled={!!editingUser}
+                placeholder={editingUser ? 'Use password reset workflow' : 'At least 8 characters'}
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none"
               />
             </div>
           </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">Reporting Manager</label>
+            <select
+              value={form.reporting_manager_id}
+              onChange={(e) => setForm({ ...form, reporting_manager_id: e.target.value })}
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none bg-white"
+            >
+              <option value="">No reporting manager assigned</option>
+              {managers.filter((manager) => manager.id !== editingUser?.id).map((manager) => (
+                <option key={manager.id} value={manager.id}>
+                  {manager.name} · {manager.role}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <details className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-stone-800">
+              Additional permissions
+              <span className="ml-2 text-xs font-normal text-stone-500">
+                Optional role-independent grants
+              </span>
+            </summary>
+            <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-2">
+              {Object.entries(permissionsByResource).map(([resource, actions]) => (
+                <fieldset key={resource} className="rounded-md border border-stone-200 bg-white p-3">
+                  <legend className="px-1 text-xs font-bold uppercase text-stone-700">{resource}</legend>
+                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                    {actions.map((action) => {
+                      const permission = `${resource}:${action}`;
+                      return (
+                        <label key={permission} className="inline-flex items-center gap-1.5 text-xs text-stone-700">
+                          <input
+                            type="checkbox"
+                            checked={form.permissions.includes(permission)}
+                            onChange={(event) => setForm({
+                              ...form,
+                              permissions: event.target.checked
+                                ? [...form.permissions, permission]
+                                : form.permissions.filter((value) => value !== permission),
+                            })}
+                          />
+                          {action}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              ))}
+            </div>
+          </details>
 
           <div className="flex justify-end gap-2 pt-2">
             <button
@@ -254,7 +424,7 @@ export default function TeamPage() {
               type="submit"
               className="px-4 py-2 bg-emerald-800 text-white rounded-lg text-sm font-medium hover:bg-emerald-900"
             >
-              Create Account
+              {editingUser ? 'Save Employee' : 'Create Account'}
             </button>
           </div>
         </form>

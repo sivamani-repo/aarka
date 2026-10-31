@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
 from app.database import get_db
-from app.models.service import WarrantyRecord, WarrantyClaim
+from app.models.service import ServiceTicket, WarrantyRecord, WarrantyClaim
 from app.models.product import Product
 from app.models.customer import Customer
 from app.models.commercial import SalesOrder
@@ -19,8 +19,27 @@ from app.schemas.schemas import (
     WarrantyClaimCreate, WarrantyClaimUpdate, WarrantyClaimOut
 )
 from app.core.permissions import get_current_user
+from app.core.rbac import canonical_role
 
 router = APIRouter(prefix="/api/warranties", tags=["Warranty & Equipment Assurance Management"])
+
+
+def _scope_warranties(db: Session, query, current_user: User):
+    if canonical_role(current_user.role) == "Support Executive":
+        assigned_customers = db.query(ServiceTicket.customer_id).filter(
+            ServiceTicket.assigned_user_id == current_user.id
+        )
+        return query.filter(WarrantyRecord.customer_id.in_(assigned_customers))
+    return query
+
+
+def _scope_claims(db: Session, query, current_user: User):
+    if canonical_role(current_user.role) == "Support Executive":
+        assigned_customers = db.query(ServiceTicket.customer_id).filter(
+            ServiceTicket.assigned_user_id == current_user.id
+        )
+        return query.filter(WarrantyClaim.customer_id.in_(assigned_customers))
+    return query
 
 
 def _calculate_warranty_dynamic_status(w: WarrantyRecord, today: date) -> str:
@@ -51,7 +70,9 @@ def get_warranty_dashboard_summary(
     - Distribution by equipment type (Solar Panels, Inverter, Battery, Structure, Workmanship)
     - Upcoming expiry timeline over next 12 months
     """
-    all_warranties = db.query(WarrantyRecord).all()
+    all_warranties = _scope_warranties(
+        db, db.query(WarrantyRecord), current_user
+    ).all()
     today = date.today()
 
     total_warranties = len(all_warranties)
@@ -95,7 +116,7 @@ def get_warranty_dashboard_summary(
         type_distribution[w_type] = type_distribution.get(w_type, 0) + 1
 
     # Open claims count
-    open_claims = db.query(WarrantyClaim).filter(
+    open_claims = _scope_claims(db, db.query(WarrantyClaim), current_user).filter(
         WarrantyClaim.claim_status.notin_(["RESOLVED", "REJECTED"])
     ).count()
 
@@ -150,7 +171,9 @@ def get_warranty_expiry_alerts(
     in_30d = today + timedelta(days=30)
     in_90d = today + timedelta(days=90)
 
-    all_w = db.query(WarrantyRecord).filter(WarrantyRecord.warranty_end >= today).all()
+    all_w = _scope_warranties(
+        db, db.query(WarrantyRecord), current_user
+    ).filter(WarrantyRecord.warranty_end >= today).all()
 
     alerts_7d = []
     alerts_30d = []
@@ -197,7 +220,9 @@ def trigger_expiry_notifications(
     Enforces that duplicate notifications are NOT sent for the same warranty and window.
     """
     today = date.today()
-    warranties = db.query(WarrantyRecord).filter(WarrantyRecord.warranty_end >= today).all()
+    warranties = _scope_warranties(
+        db, db.query(WarrantyRecord), current_user
+    ).filter(WarrantyRecord.warranty_end >= today).all()
 
     dispatched = {"90d": 0, "30d": 0, "7d": 0}
 
@@ -235,7 +260,7 @@ def list_warranties(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(WarrantyRecord)
+    query = _scope_warranties(db, db.query(WarrantyRecord), current_user)
 
     if customer_id:
         query = query.filter(WarrantyRecord.customer_id == customer_id)
@@ -325,7 +350,9 @@ def search_warranty(
     clean_q = query.strip()
     search_filter = f"%{clean_q}%"
 
-    records = db.query(WarrantyRecord).join(Customer, WarrantyRecord.customer_id == Customer.id).filter(
+    records = _scope_warranties(
+        db, db.query(WarrantyRecord), current_user
+    ).join(Customer, WarrantyRecord.customer_id == Customer.id).filter(
         or_(
             WarrantyRecord.serial_number.ilike(search_filter),
             WarrantyRecord.warranty_number.ilike(search_filter),
@@ -372,7 +399,9 @@ def get_warranty_details(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    w = db.query(WarrantyRecord).filter(WarrantyRecord.id == warranty_id).first()
+    w = _scope_warranties(
+        db, db.query(WarrantyRecord), current_user
+    ).filter(WarrantyRecord.id == warranty_id).first()
     if not w:
         raise HTTPException(status_code=404, detail="Warranty record not found")
 
@@ -422,7 +451,9 @@ def get_warranty_certificate(
     """
     Generates structured digital Warranty Certificate data for rendering or printing.
     """
-    w = db.query(WarrantyRecord).filter(WarrantyRecord.id == warranty_id).first()
+    w = _scope_warranties(
+        db, db.query(WarrantyRecord), current_user
+    ).filter(WarrantyRecord.id == warranty_id).first()
     if not w:
         raise HTTPException(status_code=404, detail="Warranty record not found")
 
@@ -467,7 +498,9 @@ def update_warranty_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    w = db.query(WarrantyRecord).filter(WarrantyRecord.id == warranty_id).first()
+    w = _scope_warranties(
+        db, db.query(WarrantyRecord), current_user
+    ).filter(WarrantyRecord.id == warranty_id).first()
     if not w:
         raise HTTPException(status_code=404, detail="Warranty record not found")
 
@@ -529,7 +562,9 @@ def list_warranty_claims(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(WarrantyClaim).order_by(WarrantyClaim.id.desc())
+    query = _scope_claims(
+        db, db.query(WarrantyClaim), current_user
+    ).order_by(WarrantyClaim.id.desc())
 
     if claim_status and claim_status != "ALL":
         query = query.filter(WarrantyClaim.claim_status == claim_status)
@@ -595,7 +630,9 @@ def create_warranty_claim(
     Submits a new Warranty Claim against a registered equipment warranty.
     Automatically updates the warranty status to CLAIM_RAISED and records an audit log.
     """
-    warranty = db.query(WarrantyRecord).filter(WarrantyRecord.id == payload.warranty_id).first()
+    warranty = _scope_warranties(
+        db, db.query(WarrantyRecord), current_user
+    ).filter(WarrantyRecord.id == payload.warranty_id).first()
     if not warranty:
         raise HTTPException(status_code=404, detail="Warranty record not found")
 
@@ -668,7 +705,9 @@ def update_warranty_claim_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    claim = db.query(WarrantyClaim).filter(WarrantyClaim.id == claim_id).first()
+    claim = _scope_claims(
+        db, db.query(WarrantyClaim), current_user
+    ).filter(WarrantyClaim.id == claim_id).first()
     if not claim:
         raise HTTPException(status_code=404, detail="Warranty claim not found")
 

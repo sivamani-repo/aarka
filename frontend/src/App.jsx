@@ -55,8 +55,18 @@ const ProtectedRoute = ({ children }) => {
     if (!user) {
         return <Navigate to="/login" replace />;
     }
+    if (!user.employee_id || user.role === 'Customer') {
+        return <Navigate to="/enquiry" replace />;
+    }
 
     return children;
+};
+
+const AuthorizedPage = ({ resource, children }) => {
+    const { hasPermission } = useAuth();
+    return hasPermission(resource)
+        ? children
+        : <Navigate to="/dashboard" replace />;
 };
 
 export default function App() {
@@ -82,28 +92,28 @@ export default function App() {
                 >
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="company-profile" element={<CompanyProfilePage />} />
-                    <Route path="dashboard" element={<DashboardPage />} />
-                    <Route path="leads" element={<LeadsPage />} />
-                    <Route path="customers" element={<CustomersPage />} />
-                    <Route path="surveys" element={<SurveysPage />} />
-                    <Route path="packages" element={<PackagesPage />} />
-                    <Route path="quotations" element={<QuotationsPage />} />
-                    <Route path="orders" element={<OrdersPage />} />
-                    <Route path="payments" element={<PaymentsPage />} />
-                    <Route path="inventory" element={<InventoryPage />} />
-                    <Route path="serials" element={<SerialsPage />} />
-                    <Route path="dispatch" element={<DispatchPage />} />
-                    <Route path="technicians" element={<TechniciansPage />} />
-                    <Route path="scheduling" element={<SchedulePage />} />
-                    <Route path="installations" element={<InstallationsPage />} />
-                    <Route path="warranties" element={<WarrantiesPage />} />
-                    <Route path="service" element={<ServicePage />} />
-                    <Route path="suppliers" element={<SuppliersPage />} />
-                    <Route path="finance" element={<FinancePage />} />
-                    <Route path="subsidies" element={<SubsidiesPage />} />
-                    <Route path="reports" element={<ReportsPage />} />
-                    <Route path="team" element={<TeamPage />} />
-                    <Route path="settings" element={<SettingsPage />} />
+                    <Route path="dashboard" element={<AuthorizedPage resource="dashboard"><DashboardPage /></AuthorizedPage>} />
+                    <Route path="leads" element={<AuthorizedPage resource="leads"><LeadsPage /></AuthorizedPage>} />
+                    <Route path="customers" element={<AuthorizedPage resource="customers"><CustomersPage /></AuthorizedPage>} />
+                    <Route path="surveys" element={<AuthorizedPage resource="surveys"><SurveysPage /></AuthorizedPage>} />
+                    <Route path="packages" element={<AuthorizedPage resource="products"><PackagesPage /></AuthorizedPage>} />
+                    <Route path="quotations" element={<AuthorizedPage resource="quotations"><QuotationsPage /></AuthorizedPage>} />
+                    <Route path="orders" element={<AuthorizedPage resource="orders"><OrdersPage /></AuthorizedPage>} />
+                    <Route path="payments" element={<AuthorizedPage resource="payments"><PaymentsPage /></AuthorizedPage>} />
+                    <Route path="inventory" element={<AuthorizedPage resource="inventory"><InventoryPage /></AuthorizedPage>} />
+                    <Route path="serials" element={<AuthorizedPage resource="serials"><SerialsPage /></AuthorizedPage>} />
+                    <Route path="dispatch" element={<AuthorizedPage resource="dispatches"><DispatchPage /></AuthorizedPage>} />
+                    <Route path="technicians" element={<AuthorizedPage resource="technicians"><TechniciansPage /></AuthorizedPage>} />
+                    <Route path="scheduling" element={<AuthorizedPage resource="installations"><SchedulePage /></AuthorizedPage>} />
+                    <Route path="installations" element={<AuthorizedPage resource="installations"><InstallationsPage /></AuthorizedPage>} />
+                    <Route path="warranties" element={<AuthorizedPage resource="warranties"><WarrantiesPage /></AuthorizedPage>} />
+                    <Route path="service" element={<AuthorizedPage resource="service"><ServicePage /></AuthorizedPage>} />
+                    <Route path="suppliers" element={<AuthorizedPage resource="suppliers"><SuppliersPage /></AuthorizedPage>} />
+                    <Route path="finance" element={<AuthorizedPage resource="finance"><FinancePage /></AuthorizedPage>} />
+                    <Route path="subsidies" element={<AuthorizedPage resource="subsidies"><SubsidiesPage /></AuthorizedPage>} />
+                    <Route path="reports" element={<AuthorizedPage resource="reports"><ReportsPage /></AuthorizedPage>} />
+                    <Route path="team" element={<AuthorizedPage resource="employees"><TeamPage /></AuthorizedPage>} />
+                    <Route path="settings" element={<AuthorizedPage resource="settings"><SettingsPage /></AuthorizedPage>} />
                 </Route>
 
                 {/* Fallback */}

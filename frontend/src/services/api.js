@@ -50,6 +50,8 @@ export const authAPI = {
   getMe: () => api.get('/api/auth/me'),
   getUsers: () => api.get('/api/auth/users'),
   getAll: () => api.get('/api/auth/users'),
+  getRoles: () => api.get('/api/auth/roles'),
+  getPermissions: () => api.get('/api/auth/permissions'),
   createUser: (data) => api.post('/api/auth/users', data),
   updateUser: (id, data) => api.put(`/api/auth/users/${id}`, data),
 };

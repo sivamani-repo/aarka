@@ -11,6 +11,7 @@ class InstallationJob(Base):
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     technician_id = Column(Integer, ForeignKey("technicians.id"), nullable=True)
+    assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     assigned_at = Column(DateTime(timezone=True), server_default=func.now())
     scheduled_date = Column(Date, nullable=True)
     start_time = Column(DateTime(timezone=True), nullable=True)
@@ -30,4 +31,4 @@ class InstallationJob(Base):
     order = relationship("SalesOrder")
     customer = relationship("Customer")
     technician = relationship("Technician")
-
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])

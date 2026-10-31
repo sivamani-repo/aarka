@@ -4,8 +4,12 @@ import { surveysAPI, customersAPI, techniciansAPI } from '../../services/api';
 import { DataTable } from '../../components/common/DataTable';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Modal } from '../../components/common/Modal';
+import { useAuth } from '../../context/AuthContext';
 
 export const SurveysPage = () => {
+  const { hasPermission } = useAuth();
+  const canAssignTechnicians = hasPermission('surveys', 'ASSIGN')
+    && hasPermission('technicians', 'VIEW');
   const [surveys, setSurveys] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [technicians, setTechnicians] = useState([]);
@@ -50,7 +54,9 @@ export const SurveysPage = () => {
       const [survRes, custRes, techRes] = await Promise.all([
         surveysAPI.getSurveys(),
         customersAPI.getCustomers(),
-        techniciansAPI.getTechnicians(),
+        hasPermission('technicians', 'VIEW')
+          ? techniciansAPI.getTechnicians()
+          : Promise.resolve({ data: [] }),
       ]);
       setSurveys(survRes.data);
       setCustomers(custRes.data);
@@ -78,7 +84,9 @@ export const SurveysPage = () => {
       await surveysAPI.scheduleSurvey({
         ...newSurvey,
         customer_id: parseInt(newSurvey.customer_id),
-        technician_id: newSurvey.technician_id ? parseInt(newSurvey.technician_id) : null,
+        technician_id: canAssignTechnicians && newSurvey.technician_id
+          ? parseInt(newSurvey.technician_id)
+          : null,
       });
       setIsScheduleOpen(false);
       fetchData();
@@ -165,7 +173,8 @@ export const SurveysPage = () => {
       header: 'Actions',
       render: (row) => (
         <div style={{ display: 'flex', gap: '6px' }}>
-          {row.status === 'SCHEDULED' || row.status === 'IN_PROGRESS' ? (
+          {(row.status === 'SCHEDULED' || row.status === 'IN_PROGRESS')
+            && hasPermission('surveys', 'EDIT') ? (
             <button
               className="btn btn-secondary btn-sm"
               onClick={() => {
@@ -177,7 +186,9 @@ export const SurveysPage = () => {
             </button>
           ) : null}
 
-          {row.approval_status === 'PENDING' && (row.status === 'SUBMITTED' || row.status === 'APPROVED') ? (
+          {row.approval_status === 'PENDING'
+            && (row.status === 'SUBMITTED' || row.status === 'APPROVED')
+            && hasPermission('surveys', 'APPROVE') ? (
             <button
               className="btn btn-primary btn-sm"
               onClick={() => {
@@ -203,9 +214,11 @@ export const SurveysPage = () => {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
-        <button className="btn btn-primary" onClick={() => setIsScheduleOpen(true)}>
-          <Plus size={16} /> Schedule Site Inspection
-        </button>
+        {hasPermission('surveys', 'CREATE') && (
+          <button className="btn btn-primary" onClick={() => setIsScheduleOpen(true)}>
+            <Plus size={16} /> Schedule Site Inspection
+          </button>
+        )}
       </div>
 
       <DataTable
@@ -237,20 +250,23 @@ export const SurveysPage = () => {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-            <div className="form-group">
-              <label className="form-label">Assign Technician</label>
-              <select
-                className="form-select"
-                value={newSurvey.technician_id}
-                onChange={(e) => setNewSurvey({ ...newSurvey, technician_id: e.target.value })}
-              >
-                {technicians.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.skills})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {canAssignTechnicians && (
+              <div className="form-group">
+                <label className="form-label">Assign Technician</label>
+                <select
+                  className="form-select"
+                  value={newSurvey.technician_id}
+                  onChange={(e) => setNewSurvey({ ...newSurvey, technician_id: e.target.value })}
+                >
+                  <option value="">Unassigned</option>
+                  {technicians.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.skills})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="form-group">
               <label className="form-label">Survey Scheduled Date *</label>

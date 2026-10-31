@@ -70,6 +70,7 @@ class ServiceTicket(Base):
     id = Column(Integer, primary_key=True, index=True)
     ticket_number = Column(String(60), unique=True, index=True, nullable=False)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     serial_number = Column(String(120), index=True, nullable=False)
     equipment_type = Column(String(100), nullable=True)
     installation_id = Column(Integer, ForeignKey("installations.id"), nullable=True)
@@ -98,3 +99,4 @@ class ServiceTicket(Base):
     customer = relationship("Customer")
     technician = relationship("Technician")
     installation = relationship("InstallationJob")
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])

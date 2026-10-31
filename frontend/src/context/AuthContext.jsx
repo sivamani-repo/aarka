@@ -83,11 +83,22 @@ export const AuthProvider = ({ children }) => {
 
   const hasRole = (allowedRoles) => {
     if (!user) return false;
-    if (user.role === 'Director / Admin' || user.role === 'Admin' || user.role === 'Director') {
+    if ([
+      'Director / Super Admin',
+      'Director / Admin',
+      'Admin',
+      'Director',
+    ].includes(user.role)) {
       return true;
     }
     return allowedRoles.includes(user.role);
   };
+
+  const hasPermission = (resource, action = 'VIEW') =>
+    !!user?.permissions?.some(
+      (permission) =>
+        permission.resource === resource && permission.action === action
+    );
 
   return (
     <AuthContext.Provider
@@ -105,6 +116,7 @@ export const AuthProvider = ({ children }) => {
         resetPassword,
         logout,
         hasRole,
+        hasPermission,
       }}
     >
       {children}

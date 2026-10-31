@@ -28,6 +28,7 @@ class SiteSurvey(Base):
     lead_id = Column(Integer, ForeignKey("leads.id"), nullable=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     technician_id = Column(Integer, ForeignKey("technicians.id"), nullable=True)
+    assigned_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     scheduled_date = Column(Date, nullable=True)
     actual_survey_date = Column(Date, nullable=True)
     roof_area = Column(Float, default=0.0)
@@ -52,4 +53,4 @@ class SiteSurvey(Base):
     technician = relationship("Technician", back_populates="surveys")
     customer = relationship("Customer")
     lead = relationship("Lead")
-
+    assigned_user = relationship("User", foreign_keys=[assigned_user_id])

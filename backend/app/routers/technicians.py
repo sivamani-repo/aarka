@@ -7,6 +7,7 @@ from app.models.survey import Technician, SiteSurvey
 from app.models.installation import InstallationJob
 from app.schemas.schemas import TechnicianCreate, TechnicianOut
 from app.core.permissions import get_current_user
+from app.core.rbac import has_permission
 from app.models.user import User
 
 router = APIRouter(prefix="/api/technicians", tags=["Technicians & Field Operations"])
@@ -25,14 +26,18 @@ def list_technicians(
     technicians = query.order_by(Technician.id.asc()).all()
     results = []
     for t in technicians:
-        active_surveys = db.query(SiteSurvey).filter(
-            SiteSurvey.technician_id == t.id,
-            SiteSurvey.status.in_(["SCHEDULED", "IN_PROGRESS"])
-        ).count()
-        active_installs = db.query(InstallationJob).filter(
-            InstallationJob.technician_id == t.id,
-            InstallationJob.status.in_(["ASSIGNED", "SCHEDULED", "IN_PROGRESS", "TESTING"])
-        ).count()
+        active_surveys = 0
+        if has_permission(db, current_user, "surveys", "VIEW"):
+            active_surveys = db.query(SiteSurvey).filter(
+                SiteSurvey.technician_id == t.id,
+                SiteSurvey.status.in_(["SCHEDULED", "IN_PROGRESS"])
+            ).count()
+        active_installs = 0
+        if has_permission(db, current_user, "installations", "VIEW"):
+            active_installs = db.query(InstallationJob).filter(
+                InstallationJob.technician_id == t.id,
+                InstallationJob.status.in_(["ASSIGNED", "SCHEDULED", "IN_PROGRESS", "TESTING"])
+            ).count()
         t_out = TechnicianOut.from_orm(t)
         t_out.active_assignments = active_surveys + active_installs
         results.append(t_out)
@@ -71,8 +76,14 @@ def get_technician_schedule(
     if not tech:
         raise HTTPException(status_code=404, detail="Technician not found")
 
-    surveys = db.query(SiteSurvey).filter(SiteSurvey.technician_id == technician_id).all()
-    installs = db.query(InstallationJob).filter(InstallationJob.technician_id == technician_id).all()
+    surveys = []
+    if has_permission(db, current_user, "surveys", "VIEW"):
+        surveys = db.query(SiteSurvey).filter(SiteSurvey.technician_id == technician_id).all()
+    installs = []
+    if has_permission(db, current_user, "installations", "VIEW"):
+        installs = db.query(InstallationJob).filter(
+            InstallationJob.technician_id == technician_id
+        ).all()
 
     return {
         "technician": TechnicianOut.from_orm(tech),
@@ -99,4 +110,3 @@ def get_technician_schedule(
             for i in installs
         ]
     }
-
