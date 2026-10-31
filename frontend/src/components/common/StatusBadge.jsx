@@ -19,7 +19,9 @@ export const StatusBadge = ({ status }) => {
       'RESOLVED',
       'CLOSED',
       'DELIVERED',
-      'AVAILABLE'
+      'AVAILABLE',
+      'APPROVED_BY_OEM',
+      'REPAIRED'
     ].includes(normalized)
   ) {
     badgeClass = 'badge-success';
@@ -34,7 +36,9 @@ export const StatusBadge = ({ status }) => {
       'MATERIAL_RESERVED',
       'READY_FOR_DISPATCH',
       'TESTING',
-      'WAITING_FOR_PARTS'
+      'WAITING_FOR_PARTS',
+      'EXPIRING_SOON',
+      'PENDING_ACTIVATION'
     ].includes(normalized)
   ) {
     badgeClass = 'badge-warning';
@@ -46,7 +50,8 @@ export const StatusBadge = ({ status }) => {
       'CANCELLED',
       'CRITICAL',
       'HIGH',
-      'RETURNED_DEFECTIVE'
+      'RETURNED_DEFECTIVE',
+      'CLAIM_RAISED'
     ].includes(normalized)
   ) {
     badgeClass = 'badge-danger';
@@ -58,7 +63,8 @@ export const StatusBadge = ({ status }) => {
       'ACCEPTED',
       'CONFIRMED',
       'DISPATCHED',
-      'ASSIGNED'
+      'ASSIGNED',
+      'REPLACEMENT_IN_PROGRESS'
     ].includes(normalized)
   ) {
     badgeClass = 'badge-info';

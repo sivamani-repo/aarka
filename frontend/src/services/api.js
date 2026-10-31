@@ -235,8 +235,17 @@ export const installationsApi = installationsAPI;
 export const warrantiesAPI = {
   getWarranties: (params) => api.get('/api/warranties', { params }),
   getAll: (params) => api.get('/api/warranties', { params }),
+  getDashboardSummary: () => api.get('/api/warranties/dashboard-summary'),
+  getExpiryAlerts: () => api.get('/api/warranties/expiry-alerts'),
+  triggerExpiryAlerts: () => api.post('/api/warranties/expiry-alerts/trigger'),
+  getWarranty: (id) => api.get(`/api/warranties/${id}`),
+  getCertificate: (id) => api.get(`/api/warranties/${id}/certificate`),
+  updateStatus: (id, data) => api.put(`/api/warranties/${id}/status`, data),
   searchWarranties: (query) => api.get('/api/warranties/search', { params: { query } }),
   search: (query) => api.get('/api/warranties/search', { params: { query } }),
+  getClaims: (params) => api.get('/api/warranties/claims/all', { params }),
+  createClaim: (data) => api.post('/api/warranties/claims', data),
+  updateClaimStatus: (id, data) => api.put(`/api/warranties/claims/${id}/status`, data),
 };
 export const warrantiesApi = warrantiesAPI;
 
