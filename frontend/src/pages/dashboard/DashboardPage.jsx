@@ -85,6 +85,7 @@ export const DashboardPage = () => {
   }
 
   const { metrics, financials, charts, operational } = data || {};
+  const selectedPeriodIndex = DASHBOARD_PERIODS.findIndex(({ value }) => value === period);
 
   return (
     <div className="dashboard-page">
@@ -100,17 +101,17 @@ export const DashboardPage = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <div style={{ backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', padding: '3px', display: 'flex' }}>
+          <div className="dashboard-period-switch" role="group" aria-label="Dashboard reporting period">
+            <span
+              className="dashboard-period-switch-indicator"
+              style={{ transform: `translateX(${selectedPeriodIndex * 100}%)` }}
+              aria-hidden="true"
+            />
             {DASHBOARD_PERIODS.map(({ value, label }) => (
               <button
                 key={value}
-                className="btn btn-sm"
-                style={{
-                  backgroundColor: period === value ? 'var(--color-primary-700)' : 'transparent',
-                  color: period === value ? '#ffffff' : 'var(--text-muted)',
-                  border: 'none',
-                  padding: '5px 12px',
-                }}
+                type="button"
+                className={`dashboard-period-option${period === value ? ' is-active' : ''}`}
                 onClick={() => setPeriod(value)}
                 aria-pressed={period === value}
               >
