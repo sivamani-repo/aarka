@@ -814,8 +814,11 @@ class WarrantyClaimOut(BaseModel):
 
 class ServiceTicketCreate(BaseModel):
     customer_id: int
-    serial_number: str
-    fault_description: str
+    serial_number: Optional[str] = None
+    reported_serial_number: Optional[str] = None
+    fault_description: Optional[str] = None
+    description: Optional[str] = None
+    title: Optional[str] = None
     fault_code: Optional[str] = "ERR-04"
     priority: str = "MEDIUM"
     installation_id: Optional[int] = None
@@ -826,16 +829,22 @@ class ServiceTicketUpdate(BaseModel):
     technician_id: Optional[int] = None
     diagnosis: Optional[str] = None
     repair_details: Optional[str] = None
+    resolution_notes: Optional[str] = None
     parts_used: Optional[str] = None
     labour_charges: Optional[float] = None
     parts_charges: Optional[float] = None
+    labor_cost: Optional[float] = None
+    parts_cost: Optional[float] = None
     status: Optional[str] = None
     customer_approved_estimate: Optional[bool] = None
+    customer_signature: Optional[str] = None
 
 
 class ServiceTicketReplaceEquipment(BaseModel):
-    replacement_serial_number: str
-    reason: str
+    replacement_serial_number: Optional[str] = None
+    new_serial_number: Optional[str] = None
+    reason: Optional[str] = None
+    replacement_reason: Optional[str] = None
 
 
 class ServiceTicketOut(BaseModel):

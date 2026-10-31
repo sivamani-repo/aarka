@@ -83,7 +83,8 @@ def create_service_ticket(
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
 
-    clean_sn = payload.serial_number.strip().upper()
+    clean_sn = (payload.serial_number or payload.reported_serial_number or "").strip().upper()
+    fault_desc = payload.fault_description or payload.description or payload.title or "Equipment fault reported"
     ser = db.query(SerializedEquipment).filter(SerializedEquipment.serial_number == clean_sn).first()
 
     # CRITICAL BUSINESS RULES #10 & #11: Look up warranty records and evaluate validity at complaint date
@@ -122,7 +123,7 @@ def create_service_ticket(
         equipment_type=ser.product.name if (ser and ser.product) else "Solar Inverter",
         installation_id=payload.installation_id or (ser.installation_id if ser else None),
         fault_code=payload.fault_code or "ERR-04",
-        fault_description=payload.fault_description,
+        fault_description=fault_desc,
         complaint_photos=json.dumps(payload.complaint_photos or []),
         priority=payload.priority or "MEDIUM",
         warranty_eligible=is_covered,
@@ -187,6 +188,7 @@ def create_service_ticket(
 
 
 @router.put("/tickets/{ticket_id}", response_model=ServiceTicketOut)
+@router.put("/tickets/{ticket_id}/assign", response_model=ServiceTicketOut)
 def update_service_ticket(
     ticket_id: int,
     payload: ServiceTicketUpdate,
@@ -205,14 +207,22 @@ def update_service_ticket(
         ticket.diagnosis = payload.diagnosis
     if payload.repair_details is not None:
         ticket.repair_details = payload.repair_details
+    elif payload.resolution_notes is not None:
+        ticket.repair_details = payload.resolution_notes
     if payload.parts_used is not None:
         ticket.parts_used = payload.parts_used
     if payload.labour_charges is not None:
         ticket.labour_charges = payload.labour_charges
+    elif payload.labor_cost is not None:
+        ticket.labour_charges = payload.labor_cost
     if payload.parts_charges is not None:
         ticket.parts_charges = payload.parts_charges
+    elif payload.parts_cost is not None:
+        ticket.parts_charges = payload.parts_cost
     if payload.customer_approved_estimate is not None:
         ticket.customer_approved_estimate = payload.customer_approved_estimate
+    if payload.customer_signature is not None:
+        ticket.customer_confirmed = True
     if payload.status is not None:
         ticket.status = payload.status
 
@@ -255,6 +265,7 @@ def update_service_ticket(
 
 
 @router.post("/tickets/{ticket_id}/replace-equipment")
+@router.post("/tickets/{ticket_id}/replacement")
 def replace_defective_equipment(
     ticket_id: int,
     payload: ServiceTicketReplaceEquipment,
@@ -265,7 +276,10 @@ def replace_defective_equipment(
     if not ticket:
         raise HTTPException(status_code=404, detail="Service ticket not found")
 
-    new_sn = payload.replacement_serial_number.strip().upper()
+    new_sn = (payload.replacement_serial_number or payload.new_serial_number or "").strip().upper()
+    if not new_sn:
+        raise HTTPException(status_code=400, detail="Replacement serial number is required")
+
     new_ser = db.query(SerializedEquipment).filter(SerializedEquipment.serial_number == new_sn).first()
     if not new_ser:
         raise HTTPException(status_code=404, detail=f"Replacement serial {new_sn} not found in inventory")
@@ -293,7 +307,8 @@ def replace_defective_equipment(
     ticket.replacement_serial_number = new_sn
     ticket.status = "RESOLVED"
     ticket.resolution_date = date.today()
-    ticket.repair_details = f"{ticket.repair_details or ''}\n[REPLACEMENT] Replaced defective unit ({ticket.serial_number}) with fresh unit ({new_sn}). Reason: {payload.reason}".strip()
+    reason_txt = payload.reason or payload.replacement_reason or "In-warranty equipment replacement"
+    ticket.repair_details = f"{ticket.repair_details or ''}\n[REPLACEMENT] Replaced defective unit ({ticket.serial_number}) with fresh unit ({new_sn}). Reason: {reason_txt}".strip()
 
     db.commit()
 

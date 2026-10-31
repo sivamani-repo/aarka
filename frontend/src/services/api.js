@@ -256,7 +256,7 @@ export const serviceAPI = {
   createTicket: (data) => api.post('/api/service/tickets', data),
   create: (data) => api.post('/api/service/tickets', data),
   assignTechnician: (id, data) => api.put(`/api/service/tickets/${id}/assign`, data),
-  replaceEquipment: (id, data) => api.post(`/api/service/tickets/${id}/replacement`, data),
+  replaceEquipment: (id, data) => api.post(`/api/service/tickets/${id}/replace-equipment`, data),
   resolveTicket: (id, data) => api.post(`/api/service/tickets/${id}/resolve`, data),
   confirmTicket: (id) => api.post(`/api/service/tickets/${id}/confirm`),
 };
