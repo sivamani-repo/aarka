@@ -40,6 +40,12 @@ api.interceptors.response.use(
 // --- Auth & Team ---
 export const authAPI = {
   login: (email, password) => api.post('/api/auth/login', { email, password }),
+  register: (data) => api.post('/api/auth/register', data),
+  googleAuth: (credential) => api.post('/api/auth/google', { credential }),
+  verifyEmail: (token) => api.get('/api/auth/verify-email', { params: { token } }),
+  resendVerification: (email) => api.post('/api/auth/resend-verification', { email }),
+  forgotPassword: (email) => api.post('/api/auth/forgot-password', { email }),
+  resetPassword: (data) => api.post('/api/auth/reset-password', data),
   getProfile: () => api.get('/api/auth/me'),
   getMe: () => api.get('/api/auth/me'),
   getUsers: () => api.get('/api/auth/users'),
