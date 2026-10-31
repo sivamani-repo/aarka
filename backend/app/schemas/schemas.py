@@ -555,6 +555,8 @@ class PaymentOut(BaseModel):
     notes: Optional[str] = None
     customer_name: Optional[str] = None
     order_number: Optional[str] = None
+    invoice_number: Optional[str] = None
+    remaining_balance: Optional[float] = None
     created_at: Optional[datetime] = None
 
     class Config:
@@ -732,17 +734,79 @@ class WarrantyOut(BaseModel):
     product_id: int
     product_name: Optional[str] = None
     category: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model_number: Optional[str] = None
+    warranty_type: Optional[str] = "PRODUCT"
+    duration_months: Optional[int] = 24
+    customer_id: int
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_address: Optional[str] = None
+    order_id: Optional[int] = None
+    order_number: Optional[str] = None
+    installation_id: Optional[int] = None
+    delivery_date: Optional[date] = None
+    warranty_start: date
+    warranty_end: date
+    days_remaining: Optional[int] = None
+    status: str
+    coverage_terms: str
+    certificate_url: Optional[str] = None
+    notes: Optional[str] = None
+    open_claims_count: Optional[int] = 0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class WarrantyStatusUpdate(BaseModel):
+    status: str
+    notes: Optional[str] = None
+
+
+class WarrantyClaimCreate(BaseModel):
+    warranty_id: int
+    issue_description: str
+    supporting_documents: Optional[List[str]] = None
+    manufacturer_reference: Optional[str] = None
+    assigned_technician_id: Optional[int] = None
+
+
+class WarrantyClaimUpdate(BaseModel):
+    claim_status: Optional[str] = None
+    manufacturer_reference: Optional[str] = None
+    assigned_technician_id: Optional[int] = None
+    replacement_serial_number: Optional[str] = None
+    resolution_details: Optional[str] = None
+    resolution_date: Optional[date] = None
+
+
+class WarrantyClaimOut(BaseModel):
+    id: int
+    claim_number: str
+    warranty_id: int
+    warranty_number: Optional[str] = None
     customer_id: int
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
     order_id: Optional[int] = None
     order_number: Optional[str] = None
-    delivery_date: Optional[date] = None
-    warranty_start: date
-    warranty_end: date
-    status: str
-    coverage_terms: str
+    serial_number: str
+    equipment_name: Optional[str] = None
+    issue_description: str
+    supporting_documents: List[str] = []
+    manufacturer_reference: Optional[str] = None
+    assigned_technician_id: Optional[int] = None
+    assigned_technician_name: Optional[str] = None
+    claim_status: str
+    replacement_serial_number: Optional[str] = None
+    resolution_details: Optional[str] = None
+    resolution_date: Optional[date] = None
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -841,6 +905,13 @@ class ExpenseCreate(BaseModel):
     order_id: Optional[int] = None
     category: str
     amount: float
+    gst_amount: Optional[float] = 0.0
+    supplier_id: Optional[int] = None
+    vendor_name: Optional[str] = None
+    invoice_reference: Optional[str] = None
+    payment_method: Optional[str] = "BANK_TRANSFER"
+    approval_status: Optional[str] = "APPROVED"
+    document_url: Optional[str] = None
     description: Optional[str] = None
     expense_date: Optional[date] = None
 
@@ -848,12 +919,73 @@ class ExpenseCreate(BaseModel):
 class ExpenseOut(BaseModel):
     id: int
     order_id: Optional[int] = None
+    order_number: Optional[str] = None
     category: str
     amount: float
+    gst_amount: Optional[float] = 0.0
+    supplier_id: Optional[int] = None
+    vendor_name: Optional[str] = None
+    invoice_reference: Optional[str] = None
+    payment_method: Optional[str] = "BANK_TRANSFER"
+    approval_status: Optional[str] = "APPROVED"
+    document_url: Optional[str] = None
     description: Optional[str] = None
     expense_date: Optional[date] = None
     recorded_by: Optional[str] = None
     created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class InvoiceItemSchema(BaseModel):
+    description: str
+    category: Optional[str] = "EQUIPMENT"
+    quantity: float = 1.0
+    unit: Optional[str] = "nos"
+    unit_price: float = 0.0
+    tax_rate: Optional[float] = 0.138
+    tax_amount: Optional[float] = 0.0
+    total_amount: float = 0.0
+
+
+class InvoiceCreate(BaseModel):
+    order_id: int
+    due_date: Optional[date] = None
+    tax_rate: Optional[float] = 0.138
+    discount: Optional[float] = 0.0
+    notes: Optional[str] = None
+    custom_items: Optional[List[InvoiceItemSchema]] = None
+
+
+class InvoiceStatusUpdate(BaseModel):
+    status: str
+    notes: Optional[str] = None
+
+
+class InvoiceOut(BaseModel):
+    id: int
+    invoice_number: str
+    order_id: int
+    order_number: Optional[str] = None
+    customer_id: int
+    customer_name: Optional[str] = None
+    customer_phone: Optional[str] = None
+    customer_email: Optional[str] = None
+    customer_address: Optional[str] = None
+    subtotal: float
+    tax_rate: float
+    tax_amount: float
+    discount: float
+    total_amount: float
+    paid_amount: float
+    balance_due: float
+    status: str
+    due_date: Optional[date] = None
+    notes: Optional[str] = None
+    items: List[InvoiceItemSchema] = []
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -879,20 +1011,82 @@ class ProjectProfitabilityOut(BaseModel):
 
 
 # ================= SUBSIDY =================
+class SubsidyEligibilityCheckRequest(BaseModel):
+    customer_id: Optional[int] = None
+    customer_name: Optional[str] = None
+    category: str = "RESIDENTIAL"  # RESIDENTIAL | GHS_RWA | COMMERCIAL
+    state: str = "Telangana"
+    discom_name: str = "TSSPDCL"
+    consumer_number: str
+    capacity_kw: float = 3.0
+    prior_subsidy_claimed: bool = False
+    is_grid_connected: bool = True
+
+
+class SubsidyEligibilityCheckResponse(BaseModel):
+    is_eligible: bool
+    scheme_name: str
+    category: str
+    capacity_kw: float
+    eligible_capacity_kw: float
+    estimated_subsidy: float
+    central_subsidy: float
+    state_subsidy: float
+    benchmark_cost: float
+    estimated_project_cost: float
+    estimated_customer_outlay: float
+    status: str  # ELIGIBLE | INELIGIBLE | REQUIRES_DOCUMENTATION
+    reasons: List[str]
+    conditions: List[str]
+    disclaimer: str
+    scheme_source: str
+
+
+class SubsidyCalculateResponse(BaseModel):
+    scheme_name: str
+    category: str
+    capacity_kw: float
+    eligible_capacity_kw: float
+    central_subsidy: float
+    state_subsidy: float
+    total_subsidy: float
+    estimated_cost: float
+    customer_contribution: float
+    calculation_steps: List[str]
+    max_subsidy_limit: float
+    disclaimer: str
+
+
 class SubsidyCreate(BaseModel):
     customer_id: int
-    scheme_name: str = "PM Surya Ghar Muft Bijli Yojana"
+    order_id: Optional[int] = None
     installation_id: Optional[int] = None
+    scheme_name: str = "PM Surya Ghar Muft Bijli Yojana"
+    category: str = "RESIDENTIAL"
+    state: str = "Telangana"
+    discom_name: str = "TSSPDCL"
+    consumer_number: Optional[str] = None
+    portal_application_ref: Optional[str] = None
     capacity_kw: float = 3.0
-    subsidy_amount: float = 78000.0
+    subsidy_amount: Optional[float] = 78000.0
+    assigned_officer: Optional[str] = None
     remarks: Optional[str] = None
 
 
 class SubsidyUpdate(BaseModel):
     verification_status: Optional[str] = None
     approval_status: Optional[str] = None
+    portal_application_ref: Optional[str] = None
+    consumer_number: Optional[str] = None
+    inspection_date: Optional[date] = None
+    approval_date: Optional[date] = None
+    disbursement_date: Optional[date] = None
+    approved_amount: Optional[float] = None
+    disbursed_amount: Optional[float] = None
+    disbursement_reference: Optional[str] = None
     subsidy_amount: Optional[float] = None
     payment_status: Optional[str] = None
+    assigned_officer: Optional[str] = None
     remarks: Optional[str] = None
 
 
@@ -902,17 +1096,33 @@ class SubsidyOut(BaseModel):
     customer_id: int
     customer_name: Optional[str] = None
     customer_phone: Optional[str] = None
+    order_id: Optional[int] = None
+    order_number: Optional[str] = None
     scheme_name: str
     installation_id: Optional[int] = None
+    category: Optional[str] = "RESIDENTIAL"
+    state: Optional[str] = "Telangana"
+    discom_name: Optional[str] = "TSSPDCL"
+    consumer_number: Optional[str] = None
+    portal_application_ref: Optional[str] = None
     capacity_kw: float
     submission_date: Optional[date] = None
+    inspection_date: Optional[date] = None
+    approval_date: Optional[date] = None
+    disbursement_date: Optional[date] = None
     verification_status: str
     approval_status: str
     subsidy_amount: float
+    approved_amount: Optional[float] = 0.0
+    disbursed_amount: Optional[float] = 0.0
+    disbursement_reference: Optional[str] = None
     payment_status: str
+    assigned_officer: Optional[str] = None
+    eligibility_notes: Optional[str] = None
     documents: str
     remarks: Optional[str] = None
     created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

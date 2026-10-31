@@ -6,7 +6,7 @@ from app.models.product import Product, Package, BOMTemplate
 from app.models.commercial import Quotation, QuotationItem, SalesOrder, SalesOrderItem, Payment
 from app.models.inventory import Supplier, InventoryItem, StockMovement, Dispatch, SerializedEquipment
 from app.models.installation import InstallationJob
-from app.models.service import WarrantyRecord, ServiceTicket
+from app.models.service import WarrantyRecord, WarrantyClaim, ServiceTicket
 from app.models.finance import ProjectExpense, Invoice
 from app.models.subsidy import SubsidyApplication
 
@@ -33,6 +33,7 @@ __all__ = [
     "SerializedEquipment",
     "InstallationJob",
     "WarrantyRecord",
+    "WarrantyClaim",
     "ServiceTicket",
     "ProjectExpense",
     "Invoice",

@@ -261,9 +261,24 @@ def complete_installation(
 
     db.commit()
 
+    # PRIMARY BUSINESS REQUIREMENT: Automatically activate warranties for all installed equipment
+    activated_count = 0
+    try:
+        from app.core.warranty_service import activate_warranties_for_installation
+        warranties = activate_warranties_for_installation(
+            db=db,
+            job=job,
+            completion_date=job.end_time.date() if job.end_time else date.today(),
+            user_name=current_user.name
+        )
+        activated_count = len(warranties)
+    except Exception as e:
+        print(f"Warning: Warranty auto-activation encountered error: {e}")
+
     return {
         "success": True,
-        "message": f"Installation {job.job_number} successfully completed and accepted by customer!",
-        "status": job.status
+        "message": f"Installation {job.job_number} successfully completed and accepted by customer! {activated_count} equipment warranty certificate(s) activated.",
+        "status": job.status,
+        "activated_warranties_count": activated_count
     }
 
