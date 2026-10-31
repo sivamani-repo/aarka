@@ -1,12 +1,98 @@
 from typing import List, Optional, Dict, Any
 from datetime import date, datetime
-from pydantic import BaseModel, Field
+import re
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+def validate_password_strength(v: str) -> str:
+    if len(v) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if not re.search(r"[A-Za-z]", v):
+        raise ValueError("Password must contain at least one letter")
+    if not re.search(r"\d", v):
+        raise ValueError("Password must contain at least one digit")
+    return v
+
+
+def validate_email_format(v: str) -> str:
+    email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+    if not re.match(email_regex, v.strip()):
+        raise ValueError("Invalid email format")
+    return v.strip().lower()
 
 
 # ================= USER & AUTH =================
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, v: str) -> str:
+        return validate_email_format(v)
+
+
+class RegisterRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=120)
+    email: str
+    password: str = Field(..., min_length=8)
+    confirm_password: str
+    phone: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, v: str) -> str:
+        return validate_email_format(v)
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v: str) -> str:
+        return validate_password_strength(v)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> "RegisterRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
+
+
+class GoogleAuthRequest(BaseModel):
+    credential: str
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, v: str) -> str:
+        return validate_email_format(v)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, v: str) -> str:
+        return validate_email_format(v)
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str = Field(..., min_length=8)
+    confirm_password: str
+
+    @field_validator("password")
+    @classmethod
+    def check_password(cls, v: str) -> str:
+        return validate_password_strength(v)
+
+    @model_validator(mode="after")
+    def check_passwords_match(self) -> "ResetPasswordRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match")
+        return self
 
 
 class TokenResponse(BaseModel):
@@ -21,6 +107,11 @@ class UserCreate(BaseModel):
     password: str
     role: str = "Sales Representative"
     phone: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def check_email(cls, v: str) -> str:
+        return validate_email_format(v)
 
 
 class UserUpdate(BaseModel):
@@ -38,6 +129,7 @@ class UserOut(BaseModel):
     role: str
     phone: Optional[str] = None
     is_active: bool
+    is_verified: bool = False
     created_at: Optional[datetime] = None
 
     class Config:
