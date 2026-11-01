@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from datetime import date, datetime
 import re
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -303,14 +303,29 @@ class LeadOut(BaseModel):
 
 
 # ================= TECHNICIAN & SURVEY =================
+TechnicianCategory = Literal[
+    "Supervisor",
+    "Senior Technician",
+    "Junior Technician",
+    "Electrician",
+    "Solar Installer",
+    "Labourer",
+]
+
+
 class TechnicianCreate(BaseModel):
     name: str
     phone: str
     email: Optional[str] = None
     skills: str = "Rooftop, Inverters, Electrical"
+    category: TechnicianCategory = "Junior Technician"
     experience_years: int = 3
     availability: str = "AVAILABLE"
     employment_status: str = "FULL_TIME"
+
+
+class TechnicianCategoryUpdate(BaseModel):
+    category: TechnicianCategory
 
 
 class TechnicianOut(BaseModel):
@@ -319,6 +334,7 @@ class TechnicianOut(BaseModel):
     phone: str
     email: Optional[str] = None
     skills: str
+    category: str
     experience_years: int
     availability: str
     status: str

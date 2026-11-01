@@ -35,29 +35,48 @@ import { dashboardAPI } from '../../services/api';
 import { StatCard } from '../../components/common/StatCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { useAuth } from '../../context/AuthContext';
+import DirectorCommandCenter from '../../components/dashboard/DirectorCommandCenter';
 
 const PIE_COLORS = ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#d97706', '#ef4444'];
+const toDateInput = (date) => {
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return localDate.toISOString().slice(0, 10);
+};
+const todayInput = toDateInput(new Date());
+const weekAgoInput = toDateInput(new Date(Date.now() - 6 * 24 * 60 * 60 * 1000));
 const DASHBOARD_PERIODS = [
   { value: 'today', label: 'Today' },
   { value: 'week', label: 'This week' },
   { value: 'month', label: 'This month' },
   { value: 'all', label: 'All time' },
+  { value: 'custom', label: 'Custom' },
 ];
 
 export const DashboardPage = () => {
   const { user, hasPermission } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState('month');
+  const [period, setPeriod] = useState('all');
+  const [startDate, setStartDate] = useState(weekAgoInput);
+  const [endDate, setEndDate] = useState(todayInput);
+  const [directorRefreshSignal, setDirectorRefreshSignal] = useState(0);
   const [loadError, setLoadError] = useState('');
   const latestRequest = useRef(0);
 
-  const fetchDashboard = async (selectedPeriod) => {
+  const fetchDashboard = async (
+    selectedPeriod,
+    selectedStartDate = startDate,
+    selectedEndDate = endDate,
+  ) => {
     const requestId = ++latestRequest.current;
     setLoading(true);
     setLoadError('');
     try {
-      const res = await dashboardAPI.getSummary(selectedPeriod);
+      const res = await dashboardAPI.getSummary(
+        selectedPeriod,
+        selectedStartDate,
+        selectedEndDate,
+      );
       if (requestId === latestRequest.current) {
         setData(res.data);
       }
@@ -74,8 +93,8 @@ export const DashboardPage = () => {
   };
 
   useEffect(() => {
-    fetchDashboard(period);
-  }, [period]);
+    fetchDashboard(period, startDate, endDate);
+  }, [period, startDate, endDate]);
 
   if (loading && !data) {
     return (
@@ -104,6 +123,16 @@ export const DashboardPage = () => {
     'Support Executive': 'Customer Support Dashboard',
   };
   const showFinance = hasPermission('payments') || hasPermission('finance');
+  const isDirector = [
+    'Director / Super Admin',
+    'Director / Admin',
+    'Director',
+    'Admin',
+  ].includes(user?.role);
+  const refreshDashboard = () => {
+    fetchDashboard(period, startDate, endDate);
+    setDirectorRefreshSignal((signal) => signal + 1);
+  };
 
   return (
     <div className="dashboard-page">
@@ -139,16 +168,49 @@ export const DashboardPage = () => {
             ))}
           </div>
 
-          <button className="btn btn-secondary btn-sm" onClick={() => fetchDashboard(period)} title="Refresh Data" disabled={loading}>
+          <button className="btn btn-secondary btn-sm" onClick={refreshDashboard} title="Refresh Data" disabled={loading}>
             <RefreshCw size={14} /> Refresh
           </button>
         </div>
       </div>
 
+      {period === 'custom' && (
+        <div className="dashboard-custom-range" aria-label="Custom dashboard date range">
+          <label>
+            <span>From</span>
+            <input
+              type="date"
+              value={startDate}
+              max={endDate || undefined}
+              onChange={(event) => setStartDate(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>To</span>
+            <input
+              type="date"
+              value={endDate}
+              min={startDate || undefined}
+              max={todayInput}
+              onChange={(event) => setEndDate(event.target.value)}
+            />
+          </label>
+        </div>
+      )}
+
       {loadError && (
         <div role="alert" className="alert alert-danger" style={{ marginBottom: '16px' }}>
           {loadError}
         </div>
+      )}
+
+      {isDirector && (
+        <DirectorCommandCenter
+          period={period}
+          startDate={startDate}
+          endDate={endDate}
+          refreshSignal={directorRefreshSignal}
+        />
       )}
 
       {/* Financial Overview Banner */}

@@ -241,10 +241,11 @@ export default function FinancePage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 enterprise-page enterprise-finance-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="enterprise-page-header">
+        <div className="enterprise-page-copy">
+          <span className="enterprise-eyebrow">Finance · Project economics</span>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Financial & Project Profitability Ledger</h1>
           <p className="text-sm text-stone-600 mt-1">
             Real-time project gross margin calculations, expense tracking against BOM, and tax invoice generation.
@@ -253,7 +254,7 @@ export default function FinancePage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowExpenseModal(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 bg-stone-100 hover:bg-stone-200 text-stone-800 text-sm font-medium rounded-lg transition-colors"
+            className="btn btn-glass"
           >
             <Plus className="w-4 h-4" />
             Record Expense
@@ -271,62 +272,56 @@ export default function FinancePage() {
       )}
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="enterprise-kpi-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Project Revenue"
           value={`₹${totalRevenue.toLocaleString('en-IN')}`}
           icon={TrendingUp}
-          subtitle="Cumulative recognized revenue"
+          subtext="Cumulative recognized revenue"
         />
         <StatCard
           title="Total Project Costs"
           value={`₹${totalCost.toLocaleString('en-IN')}`}
           icon={PieChart}
-          subtitle="BOM + Labor + Overheads"
+          subtext="BOM + Labor + Overheads"
         />
         <StatCard
           title="Gross Margin (Rule #15)"
           value={`₹${totalGrossProfit.toLocaleString('en-IN')}`}
           icon={DollarSign}
-          subtitle={`Average Margin: ${avgMargin}%`}
+          subtext={`Average Margin: ${avgMargin}%`}
         />
         <StatCard
           title="GST Invoices"
           value={invoices.length}
           icon={Receipt}
-          subtitle="Generated commercial invoices"
+          subtext="Generated commercial invoices"
         />
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-stone-200">
+      <div className="enterprise-section-tabs" role="tablist" aria-label="Finance sections">
         <button
           onClick={() => setActiveTab('PROFITABILITY')}
-          className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'PROFITABILITY'
-              ? 'border-emerald-700 text-emerald-900 font-semibold'
-              : 'border-transparent text-stone-500 hover:text-stone-800'
-          }`}
+          className={`enterprise-section-tab${activeTab === 'PROFITABILITY' ? ' is-active' : ''}`}
+          role="tab"
+          aria-selected={activeTab === 'PROFITABILITY'}
         >
           Project Profitability (Rule #15)
         </button>
         <button
           onClick={() => setActiveTab('EXPENSES')}
-          className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'EXPENSES'
-              ? 'border-emerald-700 text-emerald-900 font-semibold'
-              : 'border-transparent text-stone-500 hover:text-stone-800'
-          }`}
+          className={`enterprise-section-tab${activeTab === 'EXPENSES' ? ' is-active' : ''}`}
+          role="tab"
+          aria-selected={activeTab === 'EXPENSES'}
         >
           Recorded Expenses ({expenses.length})
         </button>
         <button
           onClick={() => setActiveTab('INVOICES')}
-          className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
-            activeTab === 'INVOICES'
-              ? 'border-emerald-700 text-emerald-900 font-semibold'
-              : 'border-transparent text-stone-500 hover:text-stone-800'
-          }`}
+          className={`enterprise-section-tab${activeTab === 'INVOICES' ? ' is-active' : ''}`}
+          role="tab"
+          aria-selected={activeTab === 'INVOICES'}
         >
           Tax Invoices ({invoices.length})
         </button>
@@ -335,6 +330,9 @@ export default function FinancePage() {
       {/* Active Tab Content */}
       {activeTab === 'PROFITABILITY' && (
         <DataTable
+          className="enterprise-table-card"
+          title="Project profitability"
+          subtitle="Revenue, costs, and gross margin by project"
           columns={profitabilityColumns}
           data={profitability}
           loading={loading}
@@ -344,6 +342,9 @@ export default function FinancePage() {
 
       {activeTab === 'EXPENSES' && (
         <DataTable
+          className="enterprise-table-card"
+          title="Project expenses"
+          subtitle="Recorded project costs and general overhead"
           columns={expenseColumns}
           data={expenses}
           loading={loading}
@@ -353,6 +354,9 @@ export default function FinancePage() {
 
       {activeTab === 'INVOICES' && (
         <DataTable
+          className="enterprise-table-card"
+          title="Tax invoices"
+          subtitle="Customer billing and payment status"
           columns={invoiceColumns}
           data={invoices}
           loading={loading}

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.survey import Technician, SiteSurvey
 from app.models.installation import InstallationJob
-from app.schemas.schemas import TechnicianCreate, TechnicianOut
+from app.schemas.schemas import TechnicianCategoryUpdate, TechnicianCreate, TechnicianOut
 from app.core.permissions import get_current_user
 from app.core.rbac import has_permission
 from app.models.user import User
@@ -55,12 +55,30 @@ def create_technician(
         phone=payload.phone,
         email=payload.email,
         skills=payload.skills,
+        category=payload.category,
         experience_years=payload.experience_years,
         availability=payload.availability,
         status="ACTIVE",
         employment_status=payload.employment_status
     )
     db.add(tech)
+    db.commit()
+    db.refresh(tech)
+    return tech
+
+
+@router.patch("/{technician_id}", response_model=TechnicianOut)
+def update_technician_category(
+    technician_id: int,
+    payload: TechnicianCategoryUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    tech = db.query(Technician).filter(Technician.id == technician_id).first()
+    if not tech:
+        raise HTTPException(status_code=404, detail="Technician not found")
+
+    tech.category = payload.category
     db.commit()
     db.refresh(tech)
     return tech

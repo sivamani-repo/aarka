@@ -1,4 +1,5 @@
-from fastapi import Request
+import pytest
+from fastapi import HTTPException, Request
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -11,7 +12,7 @@ from app.core.rbac import (
     request_permission,
     seed_rbac_catalog,
 )
-from app.routers.dashboard import _scope_dashboard_query
+from app.routers.dashboard import _scope_dashboard_query, get_director_command_summary
 from app.database import Base
 from app.models.customer import Lead
 from app.models.user import User, UserPermission
@@ -101,6 +102,23 @@ def test_all_director_role_names_have_full_module_access():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_director_dashboard_endpoint_rejects_non_director_roles():
+    employee = User(
+        name="Finance Manager",
+        email="finance@example.com",
+        role="Finance Manager",
+    )
+    with pytest.raises(HTTPException) as error:
+        get_director_command_summary(
+            period="month",
+            start_date=None,
+            end_date=None,
+            db=None,
+            current_user=employee,
+        )
+    assert error.value.status_code == 403
 
 
 def test_api_path_maps_to_required_resource_and_action():

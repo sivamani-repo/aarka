@@ -481,70 +481,70 @@ export default function SubsidiesPage() {
   ];
 
   return (
-    <div className="space-y-6 pb-16">
-      {/* ================= HERO SECTION ================= */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#071b12] via-[#0b2519] to-[#143e2b] p-6 text-white shadow-2xl sm:p-8 border border-emerald-900/40">
-        <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/15 border border-emerald-400/25 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300 backdrop-blur-md">
-              <Landmark className="h-3.5 w-3.5 text-emerald-400" />
-              <span>National Solar Mission · PM Surya Ghar & PM-KUSUM</span>
-            </div>
-
-            <h1 className="mt-3 text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-white font-display">
-              Government Solar Subsidies & Governance Desk
-            </h1>
-
-            <p className="mt-2.5 text-xs sm:text-sm text-stone-300 leading-relaxed max-w-2xl">
-              Seamlessly discover central and state government rooftop solar assistance, perform preliminary eligibility validations, manage compliance documents with 3-level verification, and monitor direct beneficiary transfers (DBT) credited by PFMS.
-            </p>
-
-            {/* Quick Policy Badges */}
-            <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-emerald-200 border border-white/10 backdrop-blur-sm">
-                <Check className="h-3.5 w-3.5 text-emerald-400" /> Up to ₹78,000 Residential DBT
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-blue-200 border border-white/10 backdrop-blur-sm">
-                <Building className="h-3.5 w-3.5 text-blue-400" /> ₹18,000/kW for Housing Societies
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-amber-200 border border-white/10 backdrop-blur-sm">
-                <Tractor className="h-3.5 w-3.5 text-amber-400" /> PM-KUSUM Farmer Grants
-              </span>
-            </div>
+    <div className="enterprise-page enterprise-subsidy-page space-y-6 pb-16">
+      <header className="subsidy-workspace-hero">
+        <div className="subsidy-hero-main">
+          <div className="subsidy-hero-kicker">
+            <Landmark className="h-4 w-4" />
+            <span>Government incentive operations</span>
+            <span className="subsidy-live-indicator"><i /> Live portfolio</span>
           </div>
-
-          <div className="flex flex-wrap lg:flex-col items-stretch sm:items-end gap-3 shrink-0">
+          <h1>Government Subsidy Desk</h1>
+          <p>
+            One workspace to assess eligibility, manage required documents, follow portal milestones,
+            and reconcile customer subsidy disbursements.
+          </p>
+          <div className="subsidy-hero-actions">
             <button
               onClick={() => setActiveTab('eligibility')}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-emerald-500/25 transition hover:from-emerald-600 hover:to-emerald-700 active:scale-95"
+              className="subsidy-primary-action"
             >
               <ShieldCheck className="h-4 w-4" />
-              Check Eligibility (Instant)
+              Start eligibility check
+              <ArrowRight className="h-4 w-4" />
             </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={loadData}
-                disabled={refreshing}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-xs font-semibold text-white backdrop-blur-md transition hover:bg-white/20"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                Refresh
-              </button>
-              <button
-                onClick={() => setShowApplyModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-white text-stone-900 px-4 py-2 text-xs font-bold shadow-md transition hover:bg-stone-100"
-              >
-                <Plus className="h-3.5 w-3.5 text-emerald-700" />
-                Register Application
-              </button>
-            </div>
+            <button
+              onClick={() => setShowApplyModal(true)}
+              className="subsidy-secondary-action"
+            >
+              <Plus className="h-4 w-4" />
+              New application
+            </button>
+            <button
+              onClick={loadData}
+              disabled={refreshing}
+              className="subsidy-refresh-action"
+              aria-label="Refresh subsidy data"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
           </div>
         </div>
 
-        {/* Ambient Glow Orbs */}
-        <div className="pointer-events-none absolute -right-12 -top-12 h-64 w-64 rounded-full bg-emerald-500/20 blur-3xl" />
-        <div className="pointer-events-none absolute -left-12 -bottom-12 h-48 w-48 rounded-full bg-amber-500/10 blur-2xl" />
-      </div>
+        <aside className="subsidy-hero-summary" aria-label="Subsidy portfolio snapshot">
+          <div className="subsidy-summary-label">
+            <span>Portfolio snapshot</span>
+            <span className="subsidy-summary-date">
+              {lastUpdated
+                ? lastUpdated.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+                : '—'}
+            </span>
+          </div>
+          <div className="subsidy-summary-value">
+            {formatCurrency(metrics?.disbursed_subsidy_total)}
+          </div>
+          <div className="subsidy-summary-caption">Confirmed disbursements · Direct to customers</div>
+          <div className="subsidy-summary-divider" />
+          <div className="subsidy-summary-stats">
+            <div><strong>{metrics?.total_applications ?? '—'}</strong><span>Applications</span></div>
+            <div><strong>{metrics?.approved_applications ?? '—'}</strong><span>Sanctioned</span></div>
+            <div><strong>{metrics?.disbursed_applications ?? '—'}</strong><span>Paid out</span></div>
+          </div>
+        </aside>
+        <div className="subsidy-hero-orb subsidy-hero-orb-one" />
+        <div className="subsidy-hero-orb subsidy-hero-orb-two" />
+      </header>
 
       {/* Notifications */}
       {errorMsg && (
@@ -567,7 +567,7 @@ export default function SubsidiesPage() {
       )}
 
       {/* ================= MODERN TAB BAR ================= */}
-      <div className="flex items-center gap-1 overflow-x-auto rounded-2xl border border-stone-200/80 bg-stone-100/70 p-1.5 backdrop-blur-md">
+      <div className="enterprise-subsidy-tabs flex items-center gap-1 overflow-x-auto rounded-2xl border border-stone-200/80 bg-stone-100/70 p-1.5 backdrop-blur-md">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -597,7 +597,7 @@ export default function SubsidiesPage() {
       {activeTab === 'overview' && (
         <div className="space-y-6">
           {/* Top 4 KPI Stat Cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="enterprise-subsidy-kpis grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-2xl border border-stone-200/80 bg-white p-5 shadow-xs hover:shadow-md transition">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-stone-500 uppercase tracking-wider">Total Applications</span>
@@ -653,6 +653,84 @@ export default function SubsidiesPage() {
               </p>
             </div>
           </div>
+
+          <section className="subsidy-pipeline-panel" aria-labelledby="subsidy-pipeline-title">
+            <div className="subsidy-panel-heading">
+              <div>
+                <span className="subsidy-section-eyebrow">Operational pipeline</span>
+                <h2 id="subsidy-pipeline-title">From assessment to customer payout</h2>
+                <p>Track progress through internal review and government processing.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('applications')}
+                className="subsidy-inline-link"
+              >
+                Open application register <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="subsidy-pipeline-steps">
+              {[
+                {
+                  number: '01',
+                  title: 'Prepare',
+                  description: 'Application & documents',
+                  count: metrics?.draft_applications ?? 0,
+                  icon: FileText,
+                  tone: 'amber',
+                },
+                {
+                  number: '02',
+                  title: 'Submit',
+                  description: 'Sent to government portal',
+                  count: metrics?.submitted_applications ?? 0,
+                  icon: Landmark,
+                  tone: 'blue',
+                },
+                {
+                  number: '03',
+                  title: 'Sanction',
+                  description: 'Approved for assistance',
+                  count: metrics?.approved_applications ?? 0,
+                  icon: ShieldCheck,
+                  tone: 'green',
+                },
+                {
+                  number: '04',
+                  title: 'Disburse',
+                  description: 'Customer bank credit',
+                  count: metrics?.disbursed_applications ?? 0,
+                  icon: Wallet,
+                  tone: 'violet',
+                },
+              ].map((step, index) => {
+                const Icon = step.icon;
+                return (
+                  <React.Fragment key={step.number}>
+                    <button
+                      type="button"
+                      className={`subsidy-pipeline-step tone-${step.tone}`}
+                      onClick={() => setActiveTab('applications')}
+                      aria-label={`${step.title}: ${step.count} applications. Open application register.`}
+                    >
+                      <span className="subsidy-step-topline">
+                        <span className="subsidy-step-number">{step.number}</span>
+                        <span className="subsidy-step-icon"><Icon className="h-4 w-4" /></span>
+                      </span>
+                      <strong>{step.title}</strong>
+                      <span className="subsidy-step-description">{step.description}</span>
+                      <span className="subsidy-step-count">{step.count} <small>applications</small></span>
+                    </button>
+                    {index < 3 && <ArrowRight className="subsidy-pipeline-arrow h-4 w-4" aria-hidden="true" />}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+            <p className="subsidy-pipeline-note">
+              <Info className="h-3.5 w-3.5" />
+              Eligibility results and subsidy amounts are estimates until confirmed by the relevant authority.
+            </p>
+          </section>
 
           {/* Charts Row */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -791,16 +869,16 @@ export default function SubsidiesPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="subsidy-scheme-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {schemes
               .filter((s) => schemeCategoryFilter === 'ALL' || s.category === schemeCategoryFilter)
               .map((sch) => {
                 const rule = sch.rules && sch.rules[0];
                 const isVerified = sch.verification_status === 'OFFICIALLY_VERIFIED';
                 return (
-                  <div
+                  <article
                     key={sch.code}
-                    className="flex flex-col rounded-3xl border border-stone-200/90 bg-white p-6 shadow-xs hover:shadow-lg transition duration-200 group"
+                    className="subsidy-scheme-card flex flex-col rounded-3xl border border-stone-200/90 bg-white p-6 shadow-xs hover:shadow-lg transition duration-200 group"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-stone-100 text-stone-700">
@@ -858,7 +936,7 @@ export default function SubsidiesPage() {
                         Checklist & Rules
                       </button>
                     </div>
-                  </div>
+                  </article>
                 );
               })}
           </div>
@@ -1483,7 +1561,7 @@ export default function SubsidiesPage() {
       {/* ================= TAB 5: APPLICATION REGISTER ================= */}
       {activeTab === 'applications' && (
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="subsidy-register-toolbar flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative w-72">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
@@ -1492,6 +1570,7 @@ export default function SubsidiesPage() {
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="Search consumer, application #..."
+                  aria-label="Search subsidy applications"
                   className={`${inputClass} pl-9`}
                 />
               </div>
@@ -1510,6 +1589,15 @@ export default function SubsidiesPage() {
                 <option value="DISBURSED">DBT Disbursed</option>
                 <option value="REJECTED">Rejected</option>
               </select>
+              {(search || statusFilter !== 'ALL') && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); setStatusFilter('ALL'); }}
+                  className="subsidy-clear-filters"
+                >
+                  Clear filters
+                </button>
+              )}
             </div>
 
             <button
@@ -1523,6 +1611,9 @@ export default function SubsidiesPage() {
 
           <div className="rounded-3xl border border-stone-200/80 bg-white overflow-hidden shadow-xs">
             <DataTable
+              className="enterprise-table-card"
+              title="Government application register"
+              subtitle={`${filteredApps.length} matching applications · Internal verification and government portal status`}
               columns={columns}
               data={filteredApps}
               loading={loading}

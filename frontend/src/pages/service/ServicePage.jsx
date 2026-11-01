@@ -3,7 +3,7 @@ import {
   Wrench, Plus, CheckCircle, AlertTriangle, ShieldCheck, 
   RotateCcw, UserCheck, Search, Filter, ShieldAlert 
 } from 'lucide-react';
-import { serviceApi, techniciansApi, serialsApi } from '../../services/api';
+import { customersAPI, serviceApi, techniciansApi } from '../../services/api';
 import StatCard from '../../components/common/StatCard';
 import StatusBadge from '../../components/common/StatusBadge';
 import DataTable from '../../components/common/DataTable';
@@ -11,10 +11,12 @@ import Modal from '../../components/common/Modal';
 
 export default function ServicePage() {
   const [tickets, setTickets] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [priorityFilter, setPriorityFilter] = useState('ALL');
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -54,6 +56,7 @@ export default function ServicePage() {
       setTickets(res.data);
     } catch (err) {
       console.error(err);
+      setFeedback({ type: 'error', msg: err.response?.data?.detail || 'Could not load service tickets.' });
     } finally {
       setLoading(false);
     }
@@ -65,12 +68,24 @@ export default function ServicePage() {
       setTechnicians(res.data);
     } catch (err) {
       console.error(err);
+      setFeedback({ type: 'error', msg: err.response?.data?.detail || 'Could not load technicians.' });
+    }
+  };
+
+  const fetchCustomers = async () => {
+    try {
+      const res = await customersAPI.getAll();
+      setCustomers(res.data);
+    } catch (err) {
+      console.error(err);
+      setFeedback({ type: 'error', msg: err.response?.data?.detail || 'Could not load customers.' });
     }
   };
 
   useEffect(() => {
     fetchTickets();
     fetchTechs();
+    fetchCustomers();
   }, []);
 
   const handleCreateTicket = async (e) => {
@@ -82,7 +97,7 @@ export default function ServicePage() {
         serial_number: createForm.reported_serial_number || createForm.serial_number,
         fault_description: createForm.description || createForm.title || 'Inverter fault reported'
       });
-      const isCov = res.data.warranty_status === 'COVERED' || res.data.is_under_warranty;
+      const isCov = res.data.warranty_status === 'COVERED' || res.data.warranty_eligible;
       const charge = res.data.total_charges ?? res.data.estimated_cost ?? 0;
       setFeedback({
         type: 'success',
@@ -178,7 +193,7 @@ export default function ServicePage() {
 
   const openResolveModal = (ticket) => {
     setSelectedTicket(ticket);
-    const isCovered = ticket.warranty_status === 'COVERED' || ticket.is_under_warranty;
+    const isCovered = ticket.warranty_status === 'COVERED' || ticket.warranty_eligible;
     setResolveForm({
       resolution_notes: 'Replaced inverter board and verified string VOC/ISC within limits.',
       labor_cost: isCovered ? 0 : 750,
@@ -198,14 +213,15 @@ export default function ServicePage() {
       sn.toLowerCase().includes(search.toLowerCase()) ||
       desc.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
-    return matchesSearch && matchesStatus;
+    const matchesPriority = priorityFilter === 'ALL' || t.priority === priorityFilter;
+    return matchesSearch && matchesStatus && matchesPriority;
   });
 
   const columns = [
     {
       header: 'Ticket #',
       accessor: 'ticket_number',
-      cell: (row) => (
+      render: (row) => (
         <span className="font-semibold text-emerald-800 font-mono text-sm">
           {row.ticket_number}
         </span>
@@ -214,7 +230,7 @@ export default function ServicePage() {
     {
       header: 'Customer',
       accessor: 'customer',
-      cell: (row) => (
+      render: (row) => (
         <div>
           <div className="font-medium text-stone-900">{row.customer_name || row.customer?.name || `Customer #${row.customer_id}`}</div>
           <div className="text-xs text-stone-500">{row.customer_phone || row.customer?.phone}</div>
@@ -224,7 +240,7 @@ export default function ServicePage() {
     {
       header: 'Fault & Serial',
       accessor: 'serial_number',
-      cell: (row) => {
+      render: (row) => {
         const sn = row.serial_number || row.reported_serial_number;
         return (
           <div>
@@ -241,8 +257,8 @@ export default function ServicePage() {
     {
       header: 'Warranty Status',
       accessor: 'warranty_status',
-      cell: (row) => {
-        const isCovered = row.warranty_status === 'COVERED' || row.is_under_warranty;
+      render: (row) => {
+        const isCovered = row.warranty_status === 'COVERED' || row.warranty_eligible;
         return (
           <div className="space-y-1">
             {isCovered ? (
@@ -266,20 +282,37 @@ export default function ServicePage() {
     {
       header: 'Technician',
       accessor: 'technician_name',
-      cell: (row) => (
+      render: (row) => (
         <span className="text-sm text-stone-700">
           {row.technician_name || row.assigned_technician?.name || <span className="text-stone-400 italic">Unassigned</span>}
         </span>
       )
     },
     {
+      header: 'Priority',
+      accessor: 'priority',
+      render: (row) => {
+        const colors = {
+          CRITICAL: 'bg-rose-100 text-rose-800',
+          HIGH: 'bg-amber-100 text-amber-800',
+          MEDIUM: 'bg-sky-100 text-sky-800',
+          LOW: 'bg-stone-100 text-stone-700',
+        };
+        return (
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${colors[row.priority] || colors.MEDIUM}`}>
+            {row.priority || 'MEDIUM'}
+          </span>
+        );
+      }
+    },
+    {
       header: 'Status',
       accessor: 'status',
-      cell: (row) => <StatusBadge status={row.status} />
+      render: (row) => <StatusBadge status={row.status} />
     },
     {
       header: 'Actions',
-      cell: (row) => (
+      render: (row) => (
         <div className="flex items-center gap-1.5">
           {row.status === 'OPEN' && (
             <button
@@ -318,21 +351,22 @@ export default function ServicePage() {
   const openCount = tickets.filter(t => t.status === 'OPEN').length;
   const inProgressCount = tickets.filter(t => ['ASSIGNED', 'IN_PROGRESS'].includes(t.status)).length;
   const resolvedCount = tickets.filter(t => ['RESOLVED', 'CLOSED'].includes(t.status)).length;
-  const warrantyCoveredCount = tickets.filter(t => t.is_under_warranty).length;
+  const warrantyCoveredCount = tickets.filter(t => t.warranty_status === 'COVERED' || t.warranty_eligible).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 enterprise-page enterprise-service-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="enterprise-page-header">
+        <div className="enterprise-page-copy">
+          <span className="enterprise-eyebrow">Customer care · Field support</span>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Service & Maintenance Tickets</h1>
           <p className="text-sm text-stone-600 mt-1">
-            Automated warranty coverage determination, dispatch technician repairs, and equipment swap workflow.
+            Track field response, warranty coverage, technician assignment, and repair outcomes in one service queue.
           </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
+          className="btn btn-glass"
         >
           <Plus className="w-4 h-4" />
           Log Service Ticket
@@ -349,35 +383,35 @@ export default function ServicePage() {
       )}
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="enterprise-kpi-grid grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           title="Open Tickets" 
           value={openCount} 
           icon={AlertTriangle} 
-          subtitle="Awaiting technician assignment" 
+          subtext="Awaiting technician assignment"
         />
         <StatCard 
           title="In Progress" 
           value={inProgressCount} 
           icon={Wrench} 
-          subtitle="Technician dispatched" 
+          subtext="Technician dispatched"
         />
         <StatCard 
           title="Under Warranty (₹0)" 
           value={warrantyCoveredCount} 
           icon={ShieldCheck} 
-          subtitle="Free coverage evaluated by rule engine" 
+          subtext="Free coverage evaluated by rule engine"
         />
         <StatCard 
           title="Resolved" 
           value={resolvedCount} 
           icon={CheckCircle} 
-          subtitle="Customer accepted repairs" 
+          subtext="Customer accepted repairs"
         />
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-xl border border-stone-200 flex flex-col sm:flex-row gap-4 items-center justify-between shadow-sm">
+      <div className="bg-white p-4 rounded-xl border border-stone-200 flex flex-col lg:flex-row gap-4 items-stretch lg:items-center justify-between shadow-sm">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -389,30 +423,58 @@ export default function ServicePage() {
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-2">
           <Filter className="w-4 h-4 text-stone-500" />
           <select
+            aria-label="Filter tickets by status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="text-sm border border-stone-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           >
-            <option value="ALL">All Statuses</option>
+            <option value="ALL">All statuses</option>
             <option value="OPEN">Open</option>
             <option value="ASSIGNED">Assigned</option>
-            <option value="IN_PROGRESS">In Progress</option>
+            <option value="IN_PROGRESS">In progress</option>
             <option value="RESOLVED">Resolved</option>
             <option value="CLOSED">Closed</option>
           </select>
+          <select
+            aria-label="Filter tickets by priority"
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+            className="text-sm border border-stone-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+          >
+            <option value="ALL">All priorities</option>
+            <option value="CRITICAL">Critical</option>
+            <option value="HIGH">High</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LOW">Low</option>
+          </select>
+          {(search || statusFilter !== 'ALL' || priorityFilter !== 'ALL') && (
+            <button
+              type="button"
+              onClick={() => { setSearch(''); setStatusFilter('ALL'); setPriorityFilter('ALL'); }}
+              className="text-sm font-medium text-emerald-800 hover:text-emerald-950 px-2 py-2"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
       </div>
 
       {/* Table */}
-      <DataTable
-        columns={columns}
-        data={filteredTickets}
-        loading={loading}
-        emptyMessage="No service tickets found."
-      />
+      {loading ? (
+        <div className="aarka-card p-10 text-center text-sm text-stone-500">Loading service tickets…</div>
+      ) : (
+        <DataTable
+          className="enterprise-table-card"
+          title="Service queue"
+          subtitle="Customer-reported issues, field ownership, and warranty coverage"
+          columns={columns}
+          data={filteredTickets}
+          emptyMessage="No service tickets match these filters."
+        />
+      )}
 
       {/* Create Ticket Modal */}
       <Modal
@@ -427,15 +489,20 @@ export default function ServicePage() {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">Customer ID *</label>
-            <input
-              type="number"
+            <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">Customer *</label>
+            <select
               required
-              placeholder="e.g. 1"
               value={createForm.customer_id}
               onChange={(e) => setCreateForm({ ...createForm, customer_id: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none"
-            />
+              className="w-full px-3 py-2 text-sm border border-stone-300 rounded-lg focus:ring-2 focus:ring-emerald-600 outline-none bg-white"
+            >
+              <option value="">Select a customer</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name} · {customer.phone}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -638,7 +705,7 @@ export default function ServicePage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">
-                Labor Cost (₹) {selectedTicket?.is_under_warranty && <span className="text-emerald-700 font-bold">(Covered)</span>}
+                Labor Cost (₹) {(selectedTicket?.warranty_status === 'COVERED' || selectedTicket?.warranty_eligible) && <span className="text-emerald-700 font-bold">(Covered)</span>}
               </label>
               <input
                 type="number"
@@ -650,7 +717,7 @@ export default function ServicePage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-stone-700 uppercase mb-1">
-                Parts Cost (₹) {selectedTicket?.is_under_warranty && <span className="text-emerald-700 font-bold">(Covered)</span>}
+                Parts Cost (₹) {(selectedTicket?.warranty_status === 'COVERED' || selectedTicket?.warranty_eligible) && <span className="text-emerald-700 font-bold">(Covered)</span>}
               </label>
               <input
                 type="number"

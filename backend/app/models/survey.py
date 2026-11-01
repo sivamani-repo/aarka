@@ -11,6 +11,7 @@ class Technician(Base):
     phone = Column(String(30), nullable=False)
     email = Column(String(150), nullable=True)
     skills = Column(String(200), default="Rooftop, Inverters, Electrical")
+    category = Column(String(50), nullable=False, default="Junior Technician")
     experience_years = Column(Integer, default=3)
     availability = Column(String(50), default="AVAILABLE")
     status = Column(String(50), default="ACTIVE")

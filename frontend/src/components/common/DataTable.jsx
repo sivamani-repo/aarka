@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ChevronLeft, ChevronRight, Inbox } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Inbox, Loader2 } from 'lucide-react';
 
 export const DataTable = ({
   columns,
@@ -9,6 +9,9 @@ export const DataTable = ({
   title,
   subtitle,
   actions,
+  className = '',
+  loading = false,
+  emptyMessage = 'No data currently available',
   pageSize = 10,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -31,7 +34,7 @@ export const DataTable = ({
   const paginatedData = filteredData.slice(startIndex, startIndex + pageSize);
 
   return (
-    <div className="aarka-card">
+    <div className={`aarka-card ${className}`.trim()}>
       <div className="aarka-card-header" style={{ flexWrap: 'wrap', gap: '16px' }}>
         <div>
           {title && <h3 style={{ fontSize: '18px', fontWeight: '700' }}>{title}</h3>}
@@ -71,12 +74,17 @@ export const DataTable = ({
       </div>
 
       <div className="table-container" style={{ border: 'none', borderRadius: 0 }}>
-        {paginatedData.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Loader2 className="animate-spin" size={24} style={{ margin: '0 auto 12px' }} />
+            <p style={{ fontSize: '13px' }}>Loading records...</p>
+          </div>
+        ) : paginatedData.length === 0 ? (
           <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>
             <Inbox size={40} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
             <h4 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '4px' }}>No records found</h4>
             <p style={{ fontSize: '13px', color: 'var(--text-light)' }}>
-              {searchTerm ? 'Try adjusting your search criteria' : 'No data currently available'}
+              {searchTerm ? 'Try adjusting your search criteria' : emptyMessage}
             </p>
           </div>
         ) : (
@@ -95,7 +103,13 @@ export const DataTable = ({
                 <tr key={row.id || rowIdx}>
                   {columns.map((col, colIdx) => (
                     <td key={colIdx}>
-                      {col.render ? col.render(row) : row[col.accessor]}
+                      {col.render
+                        ? col.render(row)
+                        : col.cell
+                          ? col.cell(row)
+                          : typeof col.accessor === 'function'
+                            ? col.accessor(row)
+                            : row[col.accessor]}
                     </td>
                   ))}
                 </tr>
@@ -143,5 +157,3 @@ export const DataTable = ({
 };
 
 export default DataTable;
-
-

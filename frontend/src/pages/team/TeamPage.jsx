@@ -215,10 +215,11 @@ export default function TeamPage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 enterprise-page enterprise-team-page">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="enterprise-page-header">
+        <div className="enterprise-page-copy">
+          <span className="enterprise-eyebrow">Administration · Access control</span>
           <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Team Management & RBAC Permissions</h1>
           <p className="text-sm text-stone-600 mt-1">
             Manage user accounts, internal department assignments, and system authorization roles.
@@ -238,7 +239,7 @@ export default function TeamPage() {
             });
             setShowModal(true);
           }}
-          className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-medium rounded-lg shadow-sm transition-colors"
+          className="btn btn-glass"
         >
           <Plus className="w-4 h-4" />
           Add Team Member
@@ -255,14 +256,18 @@ export default function TeamPage() {
       )}
 
       {/* KPI Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="Total Staff" value={users.length} icon={Users} subtitle="Registered platform users" />
-        <StatCard title="Active Accounts" value={users.filter(u => u.is_active).length} icon={UserCheck} subtitle="Authorized for sign-in" />
-        <StatCard title="Departments & Roles" value={`${new Set(roles.map((role) => role.department)).size} / ${roles.length}`} icon={Shield} subtitle="Configured departments and job roles" />
+      <div className="enterprise-kpi-grid grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard title="Total Staff" value={users.length} icon={Users} subtext="Registered platform users" />
+        <StatCard title="Active Accounts" value={users.filter(u => u.is_active).length} icon={UserCheck} subtext="Authorized for sign-in" />
+        <StatCard title="Departments & Roles" value={`${new Set(roles.map((role) => role.department)).size} / ${roles.length}`} icon={Shield} subtext="Configured departments and job roles" />
       </div>
 
       {/* Search */}
-      <div className="bg-white p-4 rounded-xl border border-stone-200 flex items-center justify-between shadow-sm">
+      <div className="enterprise-list-toolbar">
+        <div>
+          <div className="enterprise-toolbar-title">People directory</div>
+          <p className="enterprise-toolbar-description">Manage staff profiles, department access, and account status.</p>
+        </div>
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -273,9 +278,21 @@ export default function TeamPage() {
             className="w-full pl-9 pr-4 py-2 text-sm border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
           />
         </div>
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch('')}
+            className="enterprise-clear-filter"
+          >
+            Clear search
+          </button>
+        )}
       </div>
 
       <DataTable
+        className="enterprise-table-card"
+        title="Team directory"
+        subtitle="Employee accounts and access roles"
         columns={columns}
         data={filtered}
         loading={loading}

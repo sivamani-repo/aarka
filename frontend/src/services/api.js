@@ -212,6 +212,7 @@ export const techniciansAPI = {
   getAll: (params) => api.get('/api/technicians', { params }),
   createTechnician: (data) => api.post('/api/technicians', data),
   create: (data) => api.post('/api/technicians', data),
+  updateTechnicianCategory: (id, data) => api.patch(`/api/technicians/${id}`, data),
   getTechnicianSchedule: (id) => api.get(`/api/technicians/${id}/schedule`),
 };
 export const techniciansApi = techniciansAPI;
@@ -313,7 +314,18 @@ export const subsidiesApi = subsidiesAPI;
 
 // --- Dashboard ---
 export const dashboardAPI = {
-  getSummary: (period = 'month') => api.get('/api/dashboard/summary', { params: { period } }),
+  getSummary: (period = 'all', startDate, endDate) => api.get('/api/dashboard/summary', {
+    params: {
+      period,
+      ...(period === 'custom' ? { start_date: startDate, end_date: endDate } : {}),
+    },
+  }),
+  getDirectorSummary: (period = 'month', startDate, endDate) => api.get('/api/dashboard/director-summary', {
+    params: {
+      period,
+      ...(period === 'custom' ? { start_date: startDate, end_date: endDate } : {}),
+    },
+  }),
 };
 export const dashboardApi = dashboardAPI;
 

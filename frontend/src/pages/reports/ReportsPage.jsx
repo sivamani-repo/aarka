@@ -295,7 +295,7 @@ export default function ReportsPage() {
   ];
 
   return (
-    <div className="min-h-screen space-y-7 bg-stone-50/70 p-4 sm:p-6 lg:p-8">
+    <div className="enterprise-page enterprise-report-page space-y-7">
       {/* Notification */}
       {notification && (
         <div
@@ -436,7 +436,7 @@ export default function ReportsPage() {
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="enterprise-report-kpis grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {loading
             ? stats.map((stat) => (
               <div

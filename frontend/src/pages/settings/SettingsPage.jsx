@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Settings, Save, ShieldCheck, Building2, Sliders, CheckCircle2 } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Save, ShieldCheck, Building2, Sliders, CheckCircle2 } from 'lucide-react';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState({
@@ -25,6 +25,17 @@ export default function SettingsPage() {
 
   const [saved, setSaved] = useState(false);
 
+  useEffect(() => {
+    try {
+      const savedSettings = localStorage.getItem('aarka_settings');
+      if (savedSettings) {
+        setSettings((current) => ({ ...current, ...JSON.parse(savedSettings) }));
+      }
+    } catch (error) {
+      console.error('Could not load saved settings:', error);
+    }
+  }, []);
+
   const handleSave = (e) => {
     e.preventDefault();
     localStorage.setItem('aarka_settings', JSON.stringify(settings));
@@ -33,12 +44,15 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <h1 className="text-2xl font-bold text-stone-900 tracking-tight">System Settings & Business Rules</h1>
-        <p className="text-sm text-stone-600 mt-1">
-          Configure enterprise operational parameters, statutory tax percentages, and standard warranty policies.
-        </p>
+    <div className="space-y-6 enterprise-page enterprise-settings-page">
+      <div className="enterprise-page-header">
+        <div className="enterprise-page-copy">
+          <span className="enterprise-eyebrow">Administration · Platform configuration</span>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">System Settings & Business Rules</h1>
+          <p className="text-sm text-stone-600 mt-1">
+            Configure enterprise operational parameters, statutory tax percentages, and standard warranty policies.
+          </p>
+        </div>
       </div>
 
       {saved && (
@@ -50,7 +64,7 @@ export default function SettingsPage() {
 
       <form onSubmit={handleSave} className="space-y-6">
         {/* Company Profile */}
-        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm space-y-4">
+        <div className="enterprise-settings-card">
           <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
             <Building2 className="w-5 h-5 text-emerald-800" />
             <h2 className="text-base font-bold text-stone-900">Organization & DISCOM Accreditation</h2>
@@ -119,7 +133,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Standard Warranty Rules */}
-        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm space-y-4">
+        <div className="enterprise-settings-card">
           <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
             <ShieldCheck className="w-5 h-5 text-emerald-800" />
             <h2 className="text-base font-bold text-stone-900">Standard Warranty Policies (Months)</h2>
@@ -170,7 +184,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Statutory & Operational Rules */}
-        <div className="bg-white p-6 rounded-xl border border-stone-200 shadow-sm space-y-4">
+        <div className="enterprise-settings-card">
           <div className="flex items-center gap-2 pb-3 border-b border-stone-100">
             <Sliders className="w-5 h-5 text-emerald-800" />
             <h2 className="text-base font-bold text-stone-900">Statutory Tax & Operational Rule Engines</h2>
@@ -240,7 +254,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex justify-end">
+        <div className="enterprise-settings-footer">
           <button
             type="submit"
             className="inline-flex items-center gap-2 px-6 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"

@@ -374,22 +374,19 @@ export const WarrantiesPage = () => {
   ];
 
   return (
-    <div>
-      {/* Page Title & Navigation Tabs */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--color-primary-950)', margin: 0, fontFamily: 'var(--font-display)' }}>
-            Equipment Warranty Assurance & Lifecycle Desk
-          </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: '4px 0 0 0' }}>
-            Automated equipment warranty activation on installation completion • Separate product & performance terms • OEM RMA Claims
+    <div className="space-y-6 enterprise-page enterprise-warranty-page">
+      <div className="enterprise-page-header">
+        <div className="enterprise-page-copy">
+          <span className="enterprise-eyebrow">Asset assurance · After-sales care</span>
+          <h1>Warranty & Equipment Lifecycle</h1>
+          <p>
+            Monitor coverage, prepare for expirations, and coordinate manufacturer claims and service handovers.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div className="enterprise-warranty-actions">
           <button
             onClick={fetchData}
-            className="btn btn-secondary"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            className="btn btn-glass"
             disabled={loading}
           >
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
@@ -397,7 +394,6 @@ export const WarrantiesPage = () => {
           <button
             onClick={handleTriggerAlerts}
             className="btn btn-accent"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
             disabled={actionLoading}
           >
             <Send size={14} /> Send Expiry Alerts
@@ -435,7 +431,7 @@ export const WarrantiesPage = () => {
       )}
 
       {/* Navigation Tab Bar */}
-      <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border-color)', marginBottom: '20px' }}>
+      <div className="enterprise-warranty-tabs" role="tablist" aria-label="Warranty management sections">
         {[
           { id: 'OVERVIEW', label: 'Warranty Dashboard & Analytics', icon: ShieldCheck },
           { id: 'ALL_WARRANTIES', label: `Registered Warranties (${warranties.length})`, icon: FileText },
@@ -449,20 +445,9 @@ export const WarrantiesPage = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '10px 16px',
-                border: 'none',
-                background: 'none',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: isActive ? '700' : '500',
-                color: isActive ? 'var(--color-primary-800)' : 'var(--text-muted)',
-                borderBottom: isActive ? '3px solid var(--color-primary-800)' : '3px solid transparent',
-                transition: 'var(--transition-fast)',
-              }}
+              className={`enterprise-warranty-tab${isActive ? ' is-active' : ''}`}
+              role="tab"
+              aria-selected={isActive}
             >
               <Icon size={16} />
               {tab.label}
@@ -480,36 +465,34 @@ export const WarrantiesPage = () => {
               title="Total Warranties"
               value={summary?.total_warranties || warranties.length}
               icon={ShieldCheck}
-              trend="All activated certificates"
-              variant="default"
+              subtext="Registered equipment certificates"
             />
             <StatCard
               title="Active & Covered"
               value={summary?.active_warranties || 0}
               icon={CheckCircle}
-              trend="In active guarantee"
-              variant="success"
+              subtext="Currently in coverage"
             />
             <StatCard
               title="Expiring Within 90d"
               value={summary?.expiring_soon_count || 0}
               icon={Clock}
-              trend="Eligible for AMC extension"
-              variant="warning"
+              subtext="Plan inspections and renewals"
+              color="accent"
             />
             <StatCard
               title="Expired Warranties"
               value={summary?.expired_count || 0}
               icon={AlertCircle}
-              trend="Past guarantee duration"
-              variant="neutral"
+              subtext="Coverage period has ended"
+              color="accent"
             />
             <StatCard
               title="Open Warranty Claims"
               value={summary?.open_claims_count || claims.length}
               icon={AlertTriangle}
-              trend="Active OEM RMA tickets"
-              variant="danger"
+              subtext="Awaiting OEM or service action"
+              color="accent"
             />
           </div>
 

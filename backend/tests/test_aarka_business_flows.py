@@ -1,5 +1,6 @@
 import pytest
 import random
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from main import app
 from app.database import SessionLocal
@@ -7,6 +8,7 @@ from app.models.user import User
 from app.models.customer import Customer
 from app.models.survey import SiteSurvey
 from app.models.inventory import SerializedEquipment
+from app.routers.dashboard import _dashboard_local_date, _dashboard_period_window
 
 client = TestClient(app)
 
@@ -278,7 +280,7 @@ def test_project_profitability_and_finance(auth_headers):
 
 
 def test_dashboard_summary_metrics(auth_headers):
-    res = client.get("/api/dashboard/summary?period=month", headers=auth_headers)
+    res = client.get("/api/dashboard/summary?period=all", headers=auth_headers)
     assert res.status_code == 200
     data = res.json()
     assert data["metrics"]["total_customers"] > 0
@@ -303,3 +305,95 @@ def test_dashboard_period_filters(auth_headers):
     assert results["today"]["metrics"]["total_customers"] <= results["week"]["metrics"]["total_customers"]
     assert results["today"]["metrics"]["total_customers"] <= results["month"]["metrics"]["total_customers"]
     assert len(results["today"]["charts"]["revenue_trend"]) == 1
+    for metric in (
+        "pending_site_surveys",
+        "active_installations",
+        "open_service_tickets",
+        "active_warranties",
+        "pending_subsidies",
+    ):
+        assert results["today"]["metrics"][metric] == results["all"]["metrics"][metric]
+
+    invalid_period = client.get("/api/dashboard/summary?period=last-year", headers=auth_headers)
+    assert invalid_period.status_code == 422
+
+
+def test_director_command_summary_uses_real_records_and_custom_dates(auth_headers):
+    response = client.get(
+        "/api/dashboard/director-summary?period=month",
+        headers=auth_headers,
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["period"] == "month"
+    assert "recognized_revenue" in data["financials"]
+    assert "pending_technician_payments" in data["financials"]
+    assert "unfinished_installations" in data["operations"]
+    assert isinstance(data["projects"], list)
+    assert isinstance(data["alerts"], list)
+
+    custom_response = client.get(
+        "/api/dashboard/director-summary",
+        params={
+            "period": "custom",
+            "start_date": "2026-10-01",
+            "end_date": "2026-10-31",
+        },
+        headers=auth_headers,
+    )
+    assert custom_response.status_code == 200
+    assert custom_response.json()["date_start"] == "2026-10-01"
+    assert custom_response.json()["date_end"] == "2026-10-31"
+
+    missing_custom_dates = client.get(
+        "/api/dashboard/director-summary?period=custom",
+        headers=auth_headers,
+    )
+    assert missing_custom_dates.status_code == 422
+
+
+def test_dashboard_periods_use_india_local_dates():
+    now = datetime(2026, 11, 1, 0, 30, tzinfo=timezone.utc)
+    record_created_at = datetime(2026, 10, 31, 18, 44, tzinfo=timezone.utc)
+
+    today, start, end = _dashboard_period_window("today", now)
+    assert str(today) == "2026-11-01"
+    assert start <= record_created_at < end
+    assert _dashboard_local_date(record_created_at) == today
+
+    _, week_start, week_end = _dashboard_period_window("week", now)
+    _, month_start, month_end = _dashboard_period_window("month", now)
+    assert week_start <= record_created_at < week_end
+    assert month_start <= record_created_at < month_end
+    assert _dashboard_period_window("all", now) == (today, None, None)
+
+
+def test_technician_category_can_be_created_and_updated(auth_headers):
+    suffix = random.randint(100000, 999999)
+    response = client.post(
+        "/api/technicians",
+        headers=auth_headers,
+        json={
+            "name": f"Category Test Technician {suffix}",
+            "phone": f"90000{suffix}",
+            "category": "Junior Technician",
+        },
+    )
+    assert response.status_code == 200
+    technician = response.json()
+    assert technician["category"] == "Junior Technician"
+
+    updated = client.patch(
+        f"/api/technicians/{technician['id']}",
+        headers=auth_headers,
+        json={"category": "Supervisor"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["category"] == "Supervisor"
+
+    invalid = client.patch(
+        f"/api/technicians/{technician['id']}",
+        headers=auth_headers,
+        json={"category": "Customer"},
+    )
+    assert invalid.status_code == 422
