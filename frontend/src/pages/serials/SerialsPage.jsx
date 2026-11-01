@@ -336,7 +336,7 @@ export const SerialsPage = () => {
               </div>
               {(serialHistory.warranties || []).length === 0 ? (
                 <div style={{ fontSize: '12px', color: 'var(--text-light)', padding: '10px', backgroundColor: 'var(--bg-page)', borderRadius: '6px' }}>
-                  Warranty will be automatically activated upon warehouse delivery confirmation.
+                  Confirmed delivery creates a pending warranty record. Coverage remains unverified until the certificate and installation are reviewed.
                 </div>
               ) : (
                 (serialHistory.warranties || []).map((w) => (

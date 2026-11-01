@@ -54,6 +54,7 @@ class Lead(Base):
     stage = Column(String(60), default="NEW")
     status = Column(String(60), default="OPEN")
     notes = Column(Text, nullable=True)
+    privacy_consent_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

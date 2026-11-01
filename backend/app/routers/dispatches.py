@@ -1,8 +1,11 @@
 import json
 import random
+from collections import Counter
 from typing import List, Optional
 from datetime import date, timedelta
+from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -13,9 +16,32 @@ from app.models.service import WarrantyRecord
 from app.schemas.schemas import DispatchCreate, DispatchConfirmDelivery, DispatchOut
 from app.core.permissions import get_current_user
 from app.core.rbac import ASSIGN, canonical_role, has_permission
+from app.core.warranty_service import add_calendar_months
 from app.models.user import User
 
 router = APIRouter(prefix="/api/dispatches", tags=["Warehouse Dispatch & Delivery"])
+
+
+def _dispatch_stock_lines(db: Session, delivery_reference: str) -> list:
+    movements = (
+        db.query(StockMovement)
+        .filter(
+            StockMovement.reference_type == "DISPATCH",
+            StockMovement.reference_id == delivery_reference,
+        )
+        .order_by(StockMovement.id.asc())
+        .all()
+    )
+    return [
+        {
+            "product_id": movement.product_id,
+            "product_name": movement.product.name if movement.product else "Unknown product",
+            "previous_stock": movement.quantity_before,
+            "dispatched_quantity": abs(movement.quantity),
+            "remaining_stock": movement.quantity_after,
+        }
+        for movement in movements
+    ]
 
 
 def _scope_dispatches(query, current_user: User):
@@ -66,6 +92,7 @@ def list_dispatches(
             delivery_proof_url=d.delivery_proof_url,
             dispatched_by=d.dispatched_by,
             serial_numbers=d.serial_numbers,
+            stock_lines=_dispatch_stock_lines(db, d.delivery_reference),
             notes=d.notes,
             created_at=d.created_at
         ))
@@ -78,31 +105,110 @@ def create_dispatch(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    order = db.query(SalesOrder).filter(SalesOrder.id == payload.order_id).first()
+    order = (
+        db.query(SalesOrder)
+        .filter(SalesOrder.id == payload.order_id)
+        .with_for_update()
+        .first()
+    )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    if order.status != "READY_FOR_DISPATCH":
+        raise HTTPException(status_code=409, detail="Order is not ready for dispatch.")
+    if db.query(Dispatch.id).filter(Dispatch.order_id == order.id).first():
+        raise HTTPException(status_code=409, detail="This order already has a dispatch.")
+
     assigned_user_id = _resolve_dispatch_assignee(db, current_user, payload.assigned_user_id)
 
-    # CRITICAL BUSINESS RULE #7: Mandatory materials & serialized items must not be missing
-    serialized_order_items = [it for it in order.items if it.is_serialized]
-    if serialized_order_items and not payload.serial_numbers:
+    requested_serials = [serial.strip().upper() for serial in payload.serial_numbers]
+    if any(not serial for serial in requested_serials):
+        raise HTTPException(status_code=400, detail="Serial numbers cannot be empty.")
+    if len(set(requested_serials)) != len(requested_serials):
+        raise HTTPException(status_code=400, detail="A serial number cannot be dispatched more than once.")
+
+    required_quantities = Counter()
+    required_serial_quantities = Counter()
+    if not order.items:
+        raise HTTPException(status_code=409, detail="Order has no inventory line items.")
+    for item in order.items:
+        if not item.product_id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Order item {item.product_name} is not linked to an inventory product.",
+            )
+        quantity = float(item.quantity)
+        if quantity <= 0 or not quantity.is_integer():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Order item {item.product_name} must have a positive whole-number quantity.",
+            )
+        required_quantities[item.product_id] += int(quantity)
+        if item.is_serialized:
+            required_serial_quantities[item.product_id] += int(quantity)
+
+    inventory_by_product = {}
+    for product_id, requested_quantity in sorted(required_quantities.items()):
+        inventory = (
+            db.query(InventoryItem)
+            .filter(InventoryItem.product_id == product_id)
+            .with_for_update()
+            .first()
+        )
+        if inventory is None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Inventory is not configured for product {product_id}.",
+            )
+        available_quantity = inventory.quantity - inventory.reserved_quantity
+        if requested_quantity > available_quantity:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Insufficient stock for product {product_id}: "
+                    f"{available_quantity} available, {requested_quantity} required."
+                ),
+            )
+        inventory_by_product[product_id] = inventory
+
+    serials_by_product = Counter()
+    validated_serials = []
+    for serial_number in sorted(requested_serials):
+        serial = (
+            db.query(SerializedEquipment)
+            .filter(SerializedEquipment.serial_number == serial_number)
+            .with_for_update()
+            .first()
+        )
+        if serial is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Serial number {serial_number} was not found in inventory.",
+            )
+        if serial.status not in {"AVAILABLE", "IN_STOCK"}:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Serial number {serial_number} is not available for dispatch.",
+            )
+        if serial.product_id not in required_serial_quantities:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Serial number {serial_number} does not match a serialized order item.",
+            )
+        if serial.order_id not in (None, order.id):
+            raise HTTPException(
+                status_code=409,
+                detail=f"Serial number {serial_number} is assigned to another order.",
+            )
+        serials_by_product[serial.product_id] += 1
+        validated_serials.append(serial)
+
+    if serials_by_product != required_serial_quantities:
         raise HTTPException(
             status_code=400,
-            detail="Business Rule Violation: This order contains serialized equipment (Inverter / Battery). All serialized units must be scanned before dispatch can be completed."
+            detail="The scanned serial numbers must match each serialized order line quantity.",
         )
 
-    # Validate each serial number
-    validated_serials = []
-    for sn in payload.serial_numbers:
-        clean_sn = sn.strip().upper()
-        ser = db.query(SerializedEquipment).filter(SerializedEquipment.serial_number == clean_sn).first()
-        if not ser:
-            raise HTTPException(status_code=400, detail=f"Serial Number '{clean_sn}' not found in inventory.")
-        if ser.status == "DISPATCHED" and ser.order_id != order.id:
-            raise HTTPException(status_code=400, detail=f"Serial Number '{clean_sn}' is already dispatched to another order.")
-        validated_serials.append(ser)
-
-    deliv_ref = payload.delivery_reference or f"DISP-2026-{random.randint(1000, 9999)}"
+    deliv_ref = payload.delivery_reference or f"DISP-{date.today().year}-{uuid4().hex[:8].upper()}"
     dispatch = Dispatch(
         order_id=order.id,
         assigned_user_id=assigned_user_id,
@@ -115,10 +221,8 @@ def create_dispatch(
         notes=payload.notes
     )
     db.add(dispatch)
-    db.commit()
-    db.refresh(dispatch)
+    db.flush()
 
-    # Transactionally update serial records
     for ser in validated_serials:
         ser.status = "DISPATCHED"
         ser.order_id = order.id
@@ -127,27 +231,33 @@ def create_dispatch(
         ser.dispatch_date = dispatch.dispatch_date
         ser.current_location = "In Transit to Customer Site"
 
-    # Transactionally deduct stock from Inventory and record StockMovement
-    for item in order.items:
-        if item.product_id:
-            inv = db.query(InventoryItem).filter(InventoryItem.product_id == item.product_id).first()
-            if inv:
-                # Deduct inventory, ensuring no negative stock
-                qty_to_deduct = int(item.quantity)
-                inv.quantity = max(0, inv.quantity - qty_to_deduct)
-                
-            movement = StockMovement(
-                product_id=item.product_id,
+    for product_id, quantity in sorted(required_quantities.items()):
+        inventory = inventory_by_product[product_id]
+        previous_quantity = inventory.quantity
+        remaining_quantity = previous_quantity - quantity
+        inventory.quantity = remaining_quantity
+        db.add(
+            StockMovement(
+                product_id=product_id,
                 movement_type="DISPATCHED",
-                quantity=-int(item.quantity),
+                quantity=-quantity,
+                quantity_before=previous_quantity,
+                quantity_after=remaining_quantity,
                 reference_type="DISPATCH",
                 reference_id=deliv_ref,
-                notes=f"Dispatched for order {order.order_number}"
+                notes=f"Dispatched for order {order.order_number}",
             )
-            db.add(movement)
+        )
 
     order.status = "DISPATCHED"
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Dispatch could not be saved because its reference already exists.",
+        ) from exc
     db.refresh(dispatch)
 
     return DispatchOut(
@@ -165,6 +275,7 @@ def create_dispatch(
         delivery_proof_url=dispatch.delivery_proof_url,
         dispatched_by=dispatch.dispatched_by,
         serial_numbers=dispatch.serial_numbers,
+        stock_lines=_dispatch_stock_lines(db, dispatch.delivery_reference),
         notes=dispatch.notes,
         created_at=dispatch.created_at
     )
@@ -177,9 +288,55 @@ def confirm_delivery(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    dispatch = _scope_dispatches(db.query(Dispatch), current_user).filter(Dispatch.id == dispatch_id).first()
+    dispatch = (
+        _scope_dispatches(db.query(Dispatch), current_user)
+        .filter(Dispatch.id == dispatch_id)
+        .with_for_update()
+        .first()
+    )
     if not dispatch:
         raise HTTPException(status_code=404, detail="Dispatch not found")
+    if dispatch.status != "DISPATCHED":
+        raise HTTPException(status_code=409, detail="Only dispatched orders can be confirmed.")
+    if dispatch.dispatch_date and payload.delivery_date < dispatch.dispatch_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Delivery date cannot be earlier than the dispatch date.",
+        )
+
+    order = dispatch.order
+    if not order:
+        raise HTTPException(status_code=409, detail="Dispatch order is unavailable.")
+
+    try:
+        serials_list = json.loads(dispatch.serial_numbers or "[]")
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Stored dispatch serial data is invalid.",
+        ) from exc
+    if not isinstance(serials_list, list) or not all(isinstance(sn, str) for sn in serials_list):
+        raise HTTPException(status_code=500, detail="Stored dispatch serial data is invalid.")
+
+    serials = []
+    for serial_number in serials_list:
+        serial = (
+            db.query(SerializedEquipment)
+            .filter(SerializedEquipment.serial_number == serial_number)
+            .with_for_update()
+            .first()
+        )
+        if serial is None or serial.product is None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Product details for serial number {serial_number} are unavailable.",
+            )
+        if not serial.product.warranty_months or serial.product.warranty_months <= 0:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Verified warranty duration is missing for serial number {serial_number}.",
+            )
+        serials.append(serial)
 
     dispatch.status = "DELIVERED"
     dispatch.delivery_date = payload.delivery_date
@@ -188,67 +345,54 @@ def confirm_delivery(
         dispatch.delivery_proof_url = payload.delivery_proof_url
     if payload.notes:
         dispatch.notes = f"{dispatch.notes or ''}\n{payload.notes}".strip()
+    order.status = "INSTALLATION"
 
-    order = dispatch.order
-    if order:
-        order.status = "INSTALLATION"
+    pending_warranties = []
+    for serial in serials:
+        serial.current_location = (
+            f"Customer Site - {order.customer.address}"
+            if order.customer and order.customer.address
+            else "Customer Site"
+        )
+        warranty_start = payload.delivery_date
+        warranty_end = add_calendar_months(warranty_start, serial.product.warranty_months)
+        serial.warranty_start = warranty_start
+        serial.warranty_end = warranty_end
 
-    # CRITICAL BUSINESS RULES #8 & #9: Delivery confirmation activates eligible warranties automatically!
-    # Warranty starts automatically on recorded delivery date!
-    activated_warranties = []
-    try:
-        serials_list = json.loads(dispatch.serial_numbers or "[]")
-    except Exception:
-        serials_list = []
-
-    for sn in serials_list:
-        ser = db.query(SerializedEquipment).filter(SerializedEquipment.serial_number == sn).first()
-        if ser:
-            ser.current_location = f"Customer Site - {order.customer.address if order and order.customer else 'Delivered'}"
-            # Calculate warranty duration based on category
-            # Inverter: 2 years (730 days)
-            # Battery: 2 years (730 days)
-            # Panels: 20 years (7300 days)
-            cat = ser.product.category if ser.product else ""
-            if cat == "solar_panel":
-                dur_days = 7300
-            elif cat in ["inverter", "battery", "charge_controller"]:
-                dur_days = 730
-            else:
-                dur_days = (ser.product.warranty_months * 30) if ser.product else 730
-
-            start_d = payload.delivery_date
-            end_d = start_d + timedelta(days=dur_days)
-
-            ser.warranty_start = start_d
-            ser.warranty_end = end_d
-
-            war_num = f"WAR-2026-{random.randint(1000, 9999)}"
-            while db.query(WarrantyRecord).filter(WarrantyRecord.warranty_number == war_num).first():
-                war_num = f"WAR-2026-{random.randint(1000, 9999)}"
-
-            # Create or update WarrantyRecord
-            existing_war = db.query(WarrantyRecord).filter(WarrantyRecord.serial_number == sn).first()
-            if not existing_war:
-                war = WarrantyRecord(
-                    warranty_number=war_num,
-                    serial_number=sn,
-                    product_id=ser.product_id,
-                    customer_id=order.customer_id if order else ser.customer_id,
-                    order_id=order.id if order else None,
-                    delivery_date=start_d,
-                    warranty_start=start_d,
-                    warranty_end=end_d,
-                    status="COVERED",
-                    coverage_terms="100% parts & labor covered under manufacturer warranty policy."
+        existing_warranty = (
+            db.query(WarrantyRecord)
+            .filter(WarrantyRecord.serial_number == serial.serial_number)
+            .first()
+        )
+        if existing_warranty is None:
+            warranty_number = (
+                f"WAR-{date.today().year}-{uuid4().hex[:8].upper()}"
+            )
+            db.add(
+                WarrantyRecord(
+                    warranty_number=warranty_number,
+                    serial_number=serial.serial_number,
+                    product_id=serial.product_id,
+                    customer_id=order.customer_id,
+                    order_id=order.id,
+                    delivery_date=warranty_start,
+                    warranty_start=warranty_start,
+                    warranty_end=warranty_end,
+                    duration_months=serial.product.warranty_months,
+                    manufacturer=serial.product.manufacturer,
+                    status="PENDING_ACTIVATION",
+                    coverage_terms=(
+                        "Manufacturer coverage terms require verification against "
+                        "the product documentation."
+                    ),
                 )
-                db.add(war)
-                activated_warranties.append(war_num)
+            )
+            pending_warranties.append(warranty_number)
 
     # Automatically create an Installation Job if not already created
     existing_job = db.query(InstallationJob).filter(InstallationJob.order_id == order.id).first() if order else None
     if not existing_job and order:
-        job_num = f"INST-2026-{random.randint(1000, 9999)}"
+        job_num = f"INST-{date.today().year}-{random.randint(1000, 9999)}"
         job = InstallationJob(
             job_number=job_num,
             order_id=order.id,
@@ -278,5 +422,5 @@ def confirm_delivery(
         "success": True,
         "message": f"Delivery confirmed! Order {order.order_number if order else ''} moved to Installation.",
         "delivery_date": payload.delivery_date,
-        "activated_warranties": activated_warranties
+        "warranties_pending_activation": pending_warranties,
     }

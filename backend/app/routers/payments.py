@@ -1,17 +1,18 @@
-import random
 from typing import List, Optional
 from datetime import date
+from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 
 from app.database import get_db
 from app.models.commercial import SalesOrder, Payment
-from app.models.customer import Customer
 from app.models.finance import Invoice
-from app.schemas.schemas import PaymentCreate, PaymentOut
+from app.schemas.schemas import PaymentCreate, PaymentOut, PaymentVerification
 from app.core.permissions import get_current_user
-from app.models.user import User
+from app.core.rbac import APPROVE, has_permission
+from app.models.user import AuditLog, User
 
 router = APIRouter(prefix="/api/payments", tags=["Payments & Accounts Receivable"])
 
@@ -107,15 +108,19 @@ def record_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    order = db.query(SalesOrder).filter(SalesOrder.id == payload.order_id).first()
+    order = (
+        db.query(SalesOrder)
+        .filter(SalesOrder.id == payload.order_id)
+        .with_for_update()
+        .first()
+    )
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    if payload.customer_id != order.customer_id:
+        raise HTTPException(status_code=400, detail="Customer does not match the sales order.")
 
-    if payload.amount <= 0:
-        raise HTTPException(status_code=400, detail="Payment amount must be greater than zero")
-
-    # Prevent duplicate payment reference submission on the same order
     clean_ref = payload.reference.strip() if payload.reference else None
+    clean_ref = clean_ref or None
     if clean_ref:
         dup_payment = db.query(Payment).filter(Payment.order_id == order.id, Payment.reference == clean_ref).first()
         if dup_payment:
@@ -124,57 +129,155 @@ def record_payment(
                 detail=f"A transaction with reference '{clean_ref}' has already been recorded for this order ({dup_payment.payment_number})."
             )
 
-    # CRITICAL BUSINESS RULE #16: Payment totals cannot exceed payable totals without an authorized credit or refund process
-    current_paid = order.advance_paid or 0.0
+    confirmed_total = (
+        db.query(func.coalesce(func.sum(Payment.amount), 0.0))
+        .filter(
+            Payment.order_id == order.id,
+            Payment.status == "COMPLETED",
+            Payment.verified_status == "VERIFIED",
+        )
+        .scalar()
+    )
+    pending_total = (
+        db.query(func.coalesce(func.sum(Payment.amount), 0.0))
+        .filter(Payment.order_id == order.id, Payment.status == "PENDING")
+        .scalar()
+    )
+    current_paid = max(order.advance_paid or 0.0, confirmed_total or 0.0)
     total_payable = order.total_amount or 0.0
-    if current_paid + payload.amount > total_payable + 0.01:
+    if current_paid + pending_total + payload.amount > total_payable + 0.01:
+        raise HTTPException(
+            status_code=409,
+            detail="Payment exceeds the remaining order balance after pending and confirmed payments.",
+        )
+    if current_paid + pending_total == 0 and payload.amount < total_payable * 0.10:
         raise HTTPException(
             status_code=400,
-            detail=f"Business Rule Violation: Payment amount of ₹{payload.amount} exceeds the balance due of ₹{order.balance_due}. Total payments cannot exceed the payable total without authorized credit."
+            detail="The initial advance payment must be at least 10% of the order total.",
         )
 
-    year = date.today().year
-    pay_num = f"PAY-{year}-{random.randint(1000, 9999)}"
-    while db.query(Payment).filter(Payment.payment_number == pay_num).first():
-        pay_num = f"PAY-{year}-{random.randint(1000, 9999)}"
-
-    gen_ref = clean_ref or f"UPI-REF-{random.randint(100000, 999999)}"
-
+    payment_number = f"PAY-{date.today().year}-{uuid4().hex[:12].upper()}"
     payment = Payment(
-        payment_number=pay_num,
+        payment_number=payment_number,
         order_id=order.id,
         customer_id=order.customer_id,
         amount=round(payload.amount, 2),
         method=payload.method,
-        reference=gen_ref,
+        reference=clean_ref,
         payment_date=payload.payment_date or date.today(),
-        verified_status="VERIFIED",
-        status="COMPLETED",
-        notes=payload.notes or f"Payment recorded by {current_user.name}"
+        verified_status="PENDING",
+        status="PENDING",
+        notes=payload.notes,
     )
     db.add(payment)
+    db.commit()
+    db.refresh(payment)
+    invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
 
-    # Update order financial status
-    new_advance_paid = round(current_paid + payload.amount, 2)
-    new_balance_due = max(0.0, round(total_payable - new_advance_paid, 2))
-    order.advance_paid = new_advance_paid
-    order.balance_due = new_balance_due
+    return PaymentOut(
+        id=payment.id,
+        payment_number=payment.payment_number,
+        order_id=payment.order_id,
+        customer_id=payment.customer_id,
+        amount=payment.amount,
+        method=payment.method,
+        reference=payment.reference,
+        payment_date=payment.payment_date,
+        verified_status=payment.verified_status,
+        status=payment.status,
+        notes=payment.notes,
+        customer_name=order.customer.name if order.customer else None,
+        order_number=order.order_number,
+        invoice_number=invoice.invoice_number if invoice else None,
+        remaining_balance=order.balance_due,
+        created_at=payment.created_at
+    )
 
-    # If advance is now >= 20% or initial advance paid, transition order to READY_FOR_DISPATCH if still CONFIRMED
-    if order.status == "CONFIRMED" and new_advance_paid > 0:
+
+@router.post("/{payment_id}/verify", response_model=PaymentOut)
+def verify_payment(
+    payment_id: int,
+    payload: PaymentVerification,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not has_permission(db, current_user, "payments", APPROVE):
+        raise HTTPException(status_code=403, detail="Payment approval permission is required.")
+
+    payment = (
+        db.query(Payment)
+        .filter(Payment.id == payment_id)
+        .with_for_update()
+        .first()
+    )
+    if payment is None:
+        raise HTTPException(status_code=404, detail="Payment record not found")
+    if payment.status != "PENDING" or payment.verified_status == "VERIFIED":
+        raise HTTPException(status_code=409, detail="Only pending payments can be verified.")
+
+    order = (
+        db.query(SalesOrder)
+        .filter(SalesOrder.id == payment.order_id)
+        .with_for_update()
+        .first()
+    )
+    if order is None:
+        raise HTTPException(status_code=409, detail="Payment order is unavailable.")
+
+    completed_total = (
+        db.query(func.coalesce(func.sum(Payment.amount), 0.0))
+        .filter(
+            Payment.order_id == order.id,
+            Payment.status == "COMPLETED",
+            Payment.verified_status == "VERIFIED",
+        )
+        .scalar()
+    )
+    current_paid = max(order.advance_paid or 0.0, completed_total or 0.0)
+    if current_paid + payment.amount > (order.total_amount or 0.0) + 0.01:
+        raise HTTPException(
+            status_code=409,
+            detail="Payment can no longer be verified because it exceeds the remaining order balance.",
+        )
+
+    payment.status = "COMPLETED"
+    payment.verified_status = "VERIFIED"
+    payment.notes = "\n".join(
+        note for note in (payment.notes, f"Verified by {current_user.name}: {payload.confirmation_note.strip()}") if note
+    )
+    order.advance_paid = round(current_paid + payment.amount, 2)
+    order.balance_due = max(0.0, round(order.total_amount - order.advance_paid, 2))
+    if (
+        order.status == "CONFIRMED"
+        and order.advance_paid >= order.total_amount * 0.10
+    ):
         order.status = "READY_FOR_DISPATCH"
 
-    # Synchronize with linked Invoice if present
-    inv = db.query(Invoice).filter(Invoice.order_id == order.id).first()
-    if inv:
-        inv.paid_amount = round((inv.paid_amount or 0.0) + payload.amount, 2)
-        inv.balance_due = max(0.0, round(inv.total_amount - inv.paid_amount, 2))
-        if inv.balance_due <= 0:
-            inv.status = "PAID"
-        elif inv.paid_amount > 0:
-            inv.status = "PARTIALLY_PAID"
+    invoice = db.query(Invoice).filter(Invoice.order_id == order.id).first()
+    if invoice:
+        invoice.paid_amount = order.advance_paid
+        invoice.balance_due = max(0.0, round(invoice.total_amount - invoice.paid_amount, 2))
+        invoice.status = (
+            "PAID" if invoice.balance_due <= 0
+            else "PARTIALLY_PAID" if invoice.paid_amount > 0
+            else invoice.status
+        )
 
-    db.commit()
+    db.add(
+        AuditLog(
+            user_id=current_user.id,
+            action="VERIFY",
+            entity_type="payment",
+            entity_id=payment.id,
+            details=f"Payment verification: {payload.confirmation_note.strip()}",
+        )
+    )
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Payment verification conflicted with another update.") from exc
     db.refresh(payment)
 
     return PaymentOut(
@@ -191,7 +294,7 @@ def record_payment(
         notes=payment.notes,
         customer_name=order.customer.name if order.customer else None,
         order_number=order.order_number,
-        invoice_number=inv.invoice_number if inv else None,
+        invoice_number=invoice.invoice_number if invoice else None,
         remaining_balance=order.balance_due,
-        created_at=payment.created_at
+        created_at=payment.created_at,
     )

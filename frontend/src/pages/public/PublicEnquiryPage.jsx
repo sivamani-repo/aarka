@@ -4,19 +4,20 @@ import { publicAPI } from '../../services/api';
 
 export const PublicEnquiryPage = () => {
   const [formData, setFormData] = useState({
-    customer_name: 'Rajesh Varma',
-    phone: '+91 98481 99221',
-    email: 'rajesh.varma@gmail.com',
-    address: 'Plot 88, Kavuri Hills, Phase 2',
-    city: 'Hyderabad',
+    customer_name: '',
+    phone: '',
+    email: '',
+    address: '',
+    city: '',
     customer_category: 'Residential',
     preferred_contact_method: 'Phone',
     lead_source: 'Website',
     required_capacity: 3.0,
     solar_requirement: 'On-Grid',
-    monthly_electricity_bill: 3500,
-    subsidy_requirement: true,
-    additional_requirements: 'Interested in 3kW On-Grid solar rooftop with PM Surya Ghar subsidy application.',
+    monthly_electricity_bill: 0,
+    subsidy_requirement: false,
+    additional_requirements: '',
+    consent: false,
   });
 
   const [loading, setLoading] = useState(false);
@@ -108,13 +109,13 @@ export const PublicEnquiryPage = () => {
               color: '#d4ebd9',
             }}
           >
-            <Landmark size={14} color="#f59e0b" /> PM Surya Ghar Muft Bijli Yojana Approved Partner
+            <Landmark size={14} color="#f59e0b" /> Scheme eligibility is subject to official verification
           </div>
           <h1 style={{ fontSize: '36px', fontWeight: '800', color: '#ffffff', marginBottom: '12px', fontFamily: 'var(--font-display)' }}>
-            Switch to Rooftop Solar & Save up to 90% on Power Bills
+            Explore a rooftop solar installation for your property
           </h1>
           <p style={{ fontSize: '16px', color: '#b9d6c6', lineHeight: 1.6 }}>
-            Get an instant quotation, technical roof survey, certified equipment with 20-year warranty, and ₹78,000 direct government subsidy assistance.
+            Share your requirements for a consultation. System suitability, pricing, warranty coverage, and any government scheme eligibility are confirmed separately.
           </p>
         </div>
       </div>
@@ -164,7 +165,7 @@ export const PublicEnquiryPage = () => {
                   {result?.lead_reference}
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--text-main)', marginTop: '6px' }}>
-                  Capacity: <strong>{result?.required_capacity_kw} kW {result?.solar_requirement}</strong>
+                  Capacity: <strong>{formData.required_capacity} kW {formData.solar_requirement}</strong>
                 </div>
               </div>
 
@@ -334,7 +335,7 @@ export const PublicEnquiryPage = () => {
                     onChange={(e) => setFormData({ ...formData, subsidy_requirement: e.target.checked })}
                     style={{ width: '18px', height: '18px', accentColor: 'var(--color-primary-700)' }}
                   />
-                  <span>Apply for PM Surya Ghar Central Government Subsidy (Up to ₹78,000 for 3kW)</span>
+                  <span>I would like information about any subsidy for which my project may be eligible.</span>
                 </label>
               </div>
 
@@ -346,6 +347,18 @@ export const PublicEnquiryPage = () => {
                   value={formData.additional_requirements}
                   onChange={(e) => setFormData({ ...formData, additional_requirements: e.target.value })}
                 />
+              </div>
+
+              <div className="form-group">
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px' }}>
+                  <input
+                    type="checkbox"
+                    required
+                    checked={formData.consent}
+                    onChange={(e) => setFormData({ ...formData, consent: e.target.checked })}
+                  />
+                  <span>I consent to AARKA using these details to respond to my enquiry.</span>
+                </label>
               </div>
 
               <button

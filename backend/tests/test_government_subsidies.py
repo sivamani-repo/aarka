@@ -1,18 +1,8 @@
-import pytest
 import io
 from fastapi.testclient import TestClient
 from main import app
 
 client = TestClient(app)
-
-
-@pytest.fixture
-def auth_headers():
-    # Login as default Admin
-    res = client.post("/api/auth/login", json={"email": "admin@aarka.com", "password": "admin123"})
-    assert res.status_code == 200, f"Login failed: {res.text}"
-    token = res.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
 
 
 def test_government_schemes_catalogue():

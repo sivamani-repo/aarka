@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any, List
-from datetime import date, timedelta
+from datetime import datetime, time, timedelta
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, or_
@@ -9,7 +10,6 @@ from app.models.customer import Customer, Lead
 from app.models.survey import SiteSurvey
 from app.models.commercial import Quotation, SalesOrder, Payment
 from app.models.inventory import InventoryItem, Dispatch
-from app.models.product import Product
 from app.models.installation import InstallationJob
 from app.models.service import ServiceTicket, WarrantyRecord
 from app.models.finance import ProjectExpense
@@ -19,6 +19,7 @@ from app.core.rbac import canonical_role, has_permission
 from app.models.user import User
 
 router = APIRouter(prefix="/api/dashboard", tags=["Operational Dashboard"])
+BUSINESS_TIMEZONE = ZoneInfo("Asia/Kolkata")
 
 
 def _scope_dashboard_query(db, query, model, current_user: User):
@@ -113,17 +114,38 @@ def _scope_dashboard_query(db, query, model, current_user: User):
     return query
 
 
-def _filter_period(query, model, filter_start, db=None, current_user: Optional[User] = None):
+def _filter_period(
+    query,
+    model,
+    filter_start,
+    db=None,
+    current_user: Optional[User] = None,
+    filter_end=None,
+):
     if db is not None and current_user is not None:
         query = _scope_dashboard_query(db, query, model, current_user)
     if filter_start is not None:
-        return query.filter(model.created_at >= filter_start)
+        query = query.filter(model.created_at >= filter_start)
+    if filter_end is not None:
+        query = query.filter(model.created_at < filter_end)
     return query
 
 
-def _count_period(db, model, filter_start, *conditions, current_user: User):
+def _count_period(
+    db,
+    model,
+    filter_start,
+    *conditions,
+    current_user: User,
+    filter_end=None,
+):
     query = _filter_period(
-        db.query(func.count(model.id)), model, filter_start, db, current_user
+        db.query(func.count(model.id)),
+        model,
+        filter_start,
+        db,
+        current_user,
+        filter_end,
     )
     if conditions:
         query = query.filter(*conditions)
@@ -132,62 +154,115 @@ def _count_period(db, model, filter_start, *conditions, current_user: User):
 
 @router.get("/summary")
 def get_dashboard_summary(
-    period: Optional[str] = Query("month"),  # today, week, month, all
+    period: str = Query("month", pattern="^(today|week|month|all)$"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    today = date.today()
+    today = datetime.now(BUSINESS_TIMEZONE).date()
     if period == "today":
-        filter_start = today
+        start_date = today
+        end_date = today + timedelta(days=1)
     elif period == "week":
-        filter_start = today - timedelta(days=today.weekday())
+        start_date = today - timedelta(days=today.weekday())
+        end_date = start_date + timedelta(days=7)
     elif period == "month":
-        filter_start = today.replace(day=1)
+        start_date = today.replace(day=1)
+        end_date = (
+            start_date.replace(year=start_date.year + 1, month=1)
+            if start_date.month == 12
+            else start_date.replace(month=start_date.month + 1)
+        )
     else:
-        filter_start = None
+        start_date = None
+        end_date = None
+
+    filter_start = (
+        datetime.combine(start_date, time.min, tzinfo=BUSINESS_TIMEZONE)
+        if start_date
+        else None
+    )
+    filter_end = (
+        datetime.combine(end_date, time.min, tzinfo=BUSINESS_TIMEZONE)
+        if end_date
+        else None
+    )
+
+    def count_period(model, *conditions):
+        return _count_period(
+            db,
+            model,
+            filter_start,
+            *conditions,
+            current_user=current_user,
+            filter_end=filter_end,
+        )
 
     # 1. Business Metrics
-    total_customers = _count_period(db, Customer, filter_start, current_user=current_user)
-    leads_query = _filter_period(db.query(Lead), Lead, filter_start, db, current_user)
-    total_enquiries = _count_period(db, Lead, filter_start, current_user=current_user)
-    new_leads = _count_period(db, Lead, filter_start, Lead.stage == "NEW", current_user=current_user)
-    qualified_leads = _count_period(db, Lead, filter_start, Lead.stage == "QUALIFIED", current_user=current_user)
+    total_customers = count_period(Customer)
+    leads_query = _filter_period(
+        db.query(Lead), Lead, filter_start, db, current_user, filter_end
+    )
+    total_enquiries = count_period(Lead)
+    new_leads = count_period(Lead, Lead.stage == "NEW")
+    qualified_leads = count_period(Lead, Lead.stage == "QUALIFIED")
 
-    surveys_query = _filter_period(db.query(SiteSurvey), SiteSurvey, filter_start, db, current_user)
-    pending_surveys = _count_period(db, SiteSurvey, filter_start,
+    surveys_query = _filter_period(
+        db.query(SiteSurvey), SiteSurvey, filter_start, db, current_user, filter_end
+    )
+    pending_surveys = count_period(
+        SiteSurvey,
         SiteSurvey.status.in_(["SCHEDULED", "IN_PROGRESS", "SUBMITTED"]),
         SiteSurvey.approval_status != "APPROVED",
-        current_user=current_user,
     )
 
-    quotations_query = _filter_period(db.query(Quotation), Quotation, filter_start, db, current_user)
-    approved_quotations = _count_period(
-        db, Quotation, filter_start, Quotation.status.in_(["APPROVED", "ACCEPTED"]),
-        current_user=current_user,
+    quotations_query = _filter_period(
+        db.query(Quotation), Quotation, filter_start, db, current_user, filter_end
     )
-    orders_query = _filter_period(db.query(SalesOrder), SalesOrder, filter_start, db, current_user)
-    confirmed_orders = _count_period(
-        db, SalesOrder, filter_start, SalesOrder.status != "CANCELLED",
-        current_user=current_user,
+    approved_quotations = count_period(
+        Quotation, Quotation.status.in_(["APPROVED", "ACCEPTED"])
     )
+    orders_query = _filter_period(
+        db.query(SalesOrder), SalesOrder, filter_start, db, current_user, filter_end
+    )
+    confirmed_orders = count_period(SalesOrder, SalesOrder.status != "CANCELLED")
 
-    installations_query = _filter_period(db.query(InstallationJob), InstallationJob, filter_start, db, current_user)
-    active_installations = _count_period(
-        db, InstallationJob, filter_start,
+    installations_query = _filter_period(
+        db.query(InstallationJob),
+        InstallationJob,
+        filter_start,
+        db,
+        current_user,
+        filter_end,
+    )
+    active_installations = count_period(
+        InstallationJob,
         InstallationJob.status.in_(["ASSIGNED", "SCHEDULED", "IN_PROGRESS", "TESTING"]),
-        current_user=current_user,
     )
 
-    completed_installations = _count_period(
-        db, InstallationJob, filter_start,
+    completed_installations = count_period(
+        InstallationJob,
         InstallationJob.status.in_(["COMPLETED", "CUSTOMER_ACCEPTED"]),
-        current_user=current_user,
     )
 
     # Financial & Receivables
     orders = orders_query.all()
     total_revenue = sum(o.total_amount for o in orders)
-    cash_received = sum(o.advance_paid for o in orders)
+    payments_query = db.query(Payment).filter(
+        Payment.status == "COMPLETED",
+        Payment.verified_status == "VERIFIED",
+    )
+    if start_date is not None:
+        payments_query = payments_query.filter(Payment.payment_date >= start_date)
+    if end_date is not None:
+        payments_query = payments_query.filter(Payment.payment_date < end_date)
+    if canonical_role(current_user.role) == "Sales Executive":
+        assigned_orders = _scope_dashboard_query(
+            db, db.query(SalesOrder.id), SalesOrder, current_user
+        )
+        payments_query = payments_query.filter(
+            Payment.order_id.in_(assigned_orders)
+        )
+    cash_received = sum(payment.amount or 0 for payment in payments_query.all())
     outstanding_receivables = sum(o.balance_due for o in orders)
     hardware_cost = sum(o.hardware_cost for o in orders)
     labour_cost = sum(o.installation_cost for o in orders)
@@ -195,7 +270,8 @@ def get_dashboard_summary(
     expense_amounts = _filter_period(
         db.query(ProjectExpense.amount),
         ProjectExpense,
-        filter_start
+        filter_start,
+        filter_end=filter_end,
     ).all()
     total_operating_expenses = sum(amount or 0 for (amount,) in expense_amounts)
     total_expenses = hardware_cost + labour_cost + total_operating_expenses
@@ -208,38 +284,38 @@ def get_dashboard_summary(
     low_stock_count = sum(1 for it in inventory_items if it.quantity <= it.reorder_level)
 
     # Service & Warranty
-    tickets_query = _filter_period(db.query(ServiceTicket), ServiceTicket, filter_start, db, current_user)
-    open_service_tickets = _count_period(
-        db, ServiceTicket, filter_start,
+    tickets_query = _filter_period(
+        db.query(ServiceTicket),
+        ServiceTicket,
+        filter_start,
+        db,
+        current_user,
+        filter_end,
+    )
+    open_service_tickets = count_period(
+        ServiceTicket,
         ServiceTicket.status.in_(["OPEN", "ASSIGNED", "IN_PROGRESS", "WAITING_FOR_PARTS"]),
-        current_user=current_user,
     )
-    active_warranties = _count_period(
-        db, WarrantyRecord, filter_start, WarrantyRecord.status == "COVERED",
-        current_user=current_user,
+    active_warranties = count_period(
+        WarrantyRecord, WarrantyRecord.status == "COVERED"
     )
-    pending_subsidies = _count_period(
-        db, SubsidyApplication, filter_start,
+    pending_subsidies = count_period(
+        SubsidyApplication,
         SubsidyApplication.approval_status.in_(["UNDER_REVIEW", "SUBMITTED", "DOCUMENTS_PENDING"]),
-        current_user=current_user,
     )
 
     # Charts Data
     # 1. Lead Conversion Funnel
     funnel = [
         {"stage": "Enquiry Received", "count": total_enquiries},
-        {"stage": "Qualified", "count": _count_period(
-            db, Lead, filter_start,
-            Lead.stage.in_(["QUALIFIED", "SURVEY_SCHEDULED", "SURVEY_APPROVED", "QUOTATION", "CONVERTED"]),
-            current_user=current_user,
+        {"stage": "Qualified", "count": count_period(
+            Lead, Lead.stage.in_(["QUALIFIED", "SURVEY_SCHEDULED", "SURVEY_APPROVED", "QUOTATION", "CONVERTED"])
         )},
-        {"stage": "Survey Done", "count": _count_period(
-            db, SiteSurvey, filter_start, SiteSurvey.approval_status == "APPROVED",
-            current_user=current_user,
+        {"stage": "Survey Done", "count": count_period(
+            SiteSurvey, SiteSurvey.approval_status == "APPROVED"
         )},
-        {"stage": "Quotation Sent", "count": _count_period(
-            db, Quotation, filter_start, Quotation.status.in_(["SENT", "ACCEPTED"]),
-            current_user=current_user,
+        {"stage": "Quotation Sent", "count": count_period(
+            Quotation, Quotation.status.in_(["SENT", "ACCEPTED"])
         )},
         {"stage": "Orders Won", "count": confirmed_orders},
         {"stage": "Installed", "count": completed_installations}
@@ -251,24 +327,36 @@ def get_dashboard_summary(
     installs_by_bucket = {}
 
     def period_bucket(created_at):
+        created_at = (
+            created_at.replace(tzinfo=BUSINESS_TIMEZONE)
+            if created_at.tzinfo is None
+            else created_at.astimezone(BUSINESS_TIMEZONE)
+        )
         created_date = created_at.date()
         if period == "all":
             return created_date.replace(day=1)
         return created_date
 
     for order in orders:
+        if order.created_at is None:
+            continue
         bucket = period_bucket(order.created_at)
         revenue_by_bucket[bucket] = revenue_by_bucket.get(bucket, 0) + (order.total_amount or 0)
     for installation in filtered_installations:
+        if installation.created_at is None:
+            continue
         bucket = period_bucket(installation.created_at)
         installs_by_bucket[bucket] = installs_by_bucket.get(bucket, 0) + 1
 
     if period == "today":
         trend_buckets = [today]
     elif period == "week":
-        trend_buckets = [filter_start + timedelta(days=offset) for offset in range((today - filter_start).days + 1)]
+        trend_buckets = [start_date + timedelta(days=offset) for offset in range(7)]
     elif period == "month":
-        trend_buckets = [filter_start + timedelta(days=offset) for offset in range((today - filter_start).days + 1)]
+        trend_buckets = [
+            start_date + timedelta(days=offset)
+            for offset in range((end_date - start_date).days)
+        ]
     else:
         trend_buckets = sorted(set(revenue_by_bucket) | set(installs_by_bucket))
 
@@ -305,9 +393,28 @@ def get_dashboard_summary(
     upcoming_surveys = surveys_query.filter(SiteSurvey.status.in_(["SCHEDULED", "IN_PROGRESS"])).order_by(SiteSurvey.scheduled_date.asc()).limit(5).all()
     today_installs = installations_query.filter(InstallationJob.status.in_(["SCHEDULED", "IN_PROGRESS", "ASSIGNED"])).order_by(InstallationJob.scheduled_date.asc()).limit(5).all()
     pending_dispatches = _filter_period(
-        db.query(Dispatch), Dispatch, filter_start, db, current_user
+        db.query(Dispatch), Dispatch, filter_start, db, current_user, filter_end
     ).filter(Dispatch.status == "DISPATCHED", Dispatch.customer_confirmed == False).order_by(Dispatch.id.desc()).limit(5).all()
-    recent_payments = _filter_period(db.query(Payment), Payment, filter_start).order_by(Payment.id.desc()).limit(5).all()
+    recent_payments_query = db.query(Payment)
+    if start_date is not None:
+        recent_payments_query = recent_payments_query.filter(
+            Payment.payment_date >= start_date
+        )
+    if end_date is not None:
+        recent_payments_query = recent_payments_query.filter(
+            Payment.payment_date < end_date
+        )
+    if canonical_role(current_user.role) == "Sales Executive":
+        recent_payments_query = recent_payments_query.filter(
+            Payment.order_id.in_(
+                _scope_dashboard_query(
+                    db, db.query(SalesOrder.id), SalesOrder, current_user
+                )
+            )
+        )
+    recent_payments = (
+        recent_payments_query.order_by(Payment.id.desc()).limit(5).all()
+    )
     low_stock_items = db.query(InventoryItem).filter(InventoryItem.quantity <= InventoryItem.reorder_level).limit(5).all()
 
     response = {

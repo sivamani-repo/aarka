@@ -3,8 +3,9 @@ import json
 import random
 import shutil
 from typing import List, Optional
-from datetime import date, datetime
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -22,7 +23,13 @@ router = APIRouter(prefix="/api/installations", tags=["Installation Operations"]
 
 def _scope_installations(query, current_user: User):
     if canonical_role(current_user.role) == "Solar Technician":
-        return query.filter(InstallationJob.assigned_user_id == current_user.id)
+        return query.outerjoin(
+            Technician,
+            InstallationJob.technician_id == Technician.id,
+        ).filter(or_(
+            InstallationJob.assigned_user_id == current_user.id,
+            Technician.user_id == current_user.id,
+        ))
     return query
 
 
@@ -30,8 +37,12 @@ def _resolve_install_assignee(db: Session, current_user: User, requested_id: Opt
     if canonical_role(current_user.role) == "Solar Technician":
         if requested_id not in (None, current_user.id):
             raise HTTPException(status_code=403, detail="Technicians can only update their own installation assignments.")
+        if technician.user_id is not None and technician.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="This technician profile is linked to another account.")
         return current_user.id
-    assigned_id = requested_id
+    if technician.user_id is not None and requested_id not in (None, technician.user_id):
+        raise HTTPException(status_code=400, detail="The selected account does not match the technician profile.")
+    assigned_id = requested_id or technician.user_id
     if assigned_id is None and technician.email:
         employee = db.query(User).filter(User.email.ilike(technician.email)).first()
         if employee and canonical_role(employee.role) == "Solar Technician":
@@ -104,6 +115,10 @@ def schedule_installation(
     tech = db.query(Technician).filter(Technician.id == payload.technician_id).first()
     if not tech:
         raise HTTPException(status_code=404, detail="Technician not found")
+    if tech.status != "ACTIVE":
+        raise HTTPException(status_code=409, detail="The selected technician is inactive.")
+    if tech.availability == "UNAVAILABLE":
+        raise HTTPException(status_code=409, detail="The selected technician is unavailable.")
     assigned_user_id = _resolve_install_assignee(db, current_user, payload.assigned_user_id, tech)
 
     job_num = f"INST-2026-{random.randint(1000, 9999)}"
@@ -291,23 +306,9 @@ def complete_installation(
 
     db.commit()
 
-    # PRIMARY BUSINESS REQUIREMENT: Automatically activate warranties for all installed equipment
-    activated_count = 0
-    try:
-        from app.core.warranty_service import activate_warranties_for_installation
-        warranties = activate_warranties_for_installation(
-            db=db,
-            job=job,
-            completion_date=job.end_time.date() if job.end_time else date.today(),
-            user_name=current_user.name
-        )
-        activated_count = len(warranties)
-    except Exception as e:
-        print(f"Warning: Warranty auto-activation encountered error: {e}")
-
     return {
         "success": True,
-        "message": f"Installation {job.job_number} successfully completed and accepted by customer! {activated_count} equipment warranty certificate(s) activated.",
+        "message": f"Installation {job.job_number} completed and accepted. Warranty coverage remains pending verification.",
         "status": job.status,
-        "activated_warranties_count": activated_count
+        "activated_warranties_count": 0
     }

@@ -1,10 +1,11 @@
 import os
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
-from app.database import Base, engine
-import app.models
+from app.config import settings
+from app.database import engine
 from app.core.rbac import authorize_api_request
 
 from app.routers import (
@@ -33,11 +34,8 @@ from app.routers import (
     uploads,
 )
 
-# Ensure database tables exist
-Base.metadata.create_all(bind=engine)
-
 # Ensure upload directory exists
-os.makedirs("backend/uploads", exist_ok=True)
+os.makedirs(settings.upload_path, exist_ok=True)
 
 app = FastAPI(
     title="AARKA API",
@@ -48,10 +46,9 @@ app = FastAPI(
     dependencies=[Depends(authorize_api_request)],
 )
 
-# Enable CORS for Vite frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[settings.frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -109,6 +106,15 @@ def home():
 @app.get("/health")
 @app.get("/api/health")
 def health_check():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Database is unavailable",
+        ) from exc
+
     return {
         "status": "healthy",
         "database": "connected",

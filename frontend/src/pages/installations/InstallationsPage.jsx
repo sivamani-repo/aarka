@@ -38,12 +38,8 @@ export const InstallationsPage = () => {
     customer_handover: false,
   });
 
-  const [technicalObservations, setTechnicalObservations] = useState(
-    'All modules aligned to 18° tilt south facing. Inverter MPPT efficiency 98.4%. Earthing resistance measured at 1.8 ohms.'
-  );
-  const [testingResults, setTestingResults] = useState(
-    'Grid voltage 238V, frequency 50.1Hz, DC isolation OK, solar generation verified at 3.1kW.'
-  );
+  const [technicalObservations, setTechnicalObservations] = useState('');
+  const [testingResults, setTestingResults] = useState('');
   const [signatureData, setSignatureData] = useState('');
   const [submitError, setSubmitError] = useState('');
 

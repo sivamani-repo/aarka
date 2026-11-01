@@ -44,6 +44,8 @@ class StockMovement(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     movement_type = Column(String(60), nullable=False)
     quantity = Column(Integer, nullable=False)
+    quantity_before = Column(Integer, nullable=True)
+    quantity_after = Column(Integer, nullable=True)
     reference_type = Column(String(60), nullable=True)
     reference_id = Column(String(80), nullable=True)
     notes = Column(Text, nullable=True)

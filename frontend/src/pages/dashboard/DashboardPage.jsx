@@ -31,7 +31,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { dashboardAPI } from '../../services/api';
+import { dashboardAPI, techniciansAPI } from '../../services/api';
 import { StatCard } from '../../components/common/StatCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { useAuth } from '../../context/AuthContext';
@@ -50,7 +50,11 @@ export const DashboardPage = () => {
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
   const [loadError, setLoadError] = useState('');
+  const [technicianAvailability, setTechnicianAvailability] = useState(null);
+  const [availabilityError, setAvailabilityError] = useState('');
+  const [availabilitySaving, setAvailabilitySaving] = useState(false);
   const latestRequest = useRef(0);
+  const isSolarTechnician = user?.role === 'Solar Technician';
 
   const fetchDashboard = async (selectedPeriod) => {
     const requestId = ++latestRequest.current;
@@ -76,6 +80,50 @@ export const DashboardPage = () => {
   useEffect(() => {
     fetchDashboard(period);
   }, [period]);
+
+  useEffect(() => {
+    if (!isSolarTechnician) return undefined;
+    let active = true;
+    const refreshAvailability = async () => {
+      try {
+        const response = await techniciansAPI.getMyAvailability();
+        if (active) {
+          setTechnicianAvailability(response.data);
+          setAvailabilityError('');
+        }
+      } catch (error) {
+        if (active) {
+          setAvailabilityError(
+            error.response?.data?.detail || 'Could not load your technician availability.',
+          );
+        }
+      }
+    };
+    refreshAvailability();
+    const intervalId = window.setInterval(refreshAvailability, 15000);
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+    };
+  }, [isSolarTechnician]);
+
+  const toggleTechnicianAvailability = async () => {
+    const nextAvailability = technicianAvailability?.preference === 'UNAVAILABLE'
+      ? 'AVAILABLE'
+      : 'UNAVAILABLE';
+    setAvailabilitySaving(true);
+    try {
+      const response = await techniciansAPI.updateMyAvailability(nextAvailability);
+      setTechnicianAvailability(response.data);
+      setAvailabilityError('');
+    } catch (error) {
+      setAvailabilityError(
+        error.response?.data?.detail || 'Could not update your technician availability.',
+      );
+    } finally {
+      setAvailabilitySaving(false);
+    }
+  };
 
   if (loading && !data) {
     return (
@@ -149,6 +197,47 @@ export const DashboardPage = () => {
         <div role="alert" className="alert alert-danger" style={{ marginBottom: '16px' }}>
           {loadError}
         </div>
+      )}
+
+      {isSolarTechnician && (
+        <section className="aarka-card" style={{ padding: '18px 22px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+            <div>
+              <h2 style={{ fontSize: '15px', fontWeight: '700' }}>Field availability</h2>
+              {technicianAvailability ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                  Current status: <StatusBadge status={technicianAvailability.availability} />
+                  {technicianAvailability.updated_at
+                    ? ` · Updated ${new Date(technicianAvailability.updated_at).toLocaleString()}`
+                    : ''}
+                </p>
+              ) : (
+                <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                  {availabilityError || 'Loading your linked technician profile...'}
+                </p>
+              )}
+              {technicianAvailability && availabilityError && (
+                <p role="alert" style={{ color: 'var(--color-danger-700)', fontSize: '12px', marginTop: '4px' }}>
+                  {availabilityError}
+                </p>
+              )}
+            </div>
+            {technicianAvailability && (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={toggleTechnicianAvailability}
+                disabled={availabilitySaving}
+              >
+                {availabilitySaving
+                  ? 'Saving...'
+                  : technicianAvailability.preference === 'UNAVAILABLE'
+                    ? 'Mark available'
+                    : 'Mark unavailable'}
+              </button>
+            )}
+          </div>
+        </section>
       )}
 
       {/* Financial Overview Banner */}

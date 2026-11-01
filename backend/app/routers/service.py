@@ -11,7 +11,6 @@ from app.models.service import ServiceTicket, WarrantyRecord
 from app.models.inventory import SerializedEquipment
 from app.models.customer import Customer
 from app.models.survey import Technician
-from app.models.finance import ProjectExpense
 from app.schemas.schemas import ServiceTicketCreate, ServiceTicketUpdate, ServiceTicketReplaceEquipment, ServiceTicketOut
 from app.core.permissions import get_current_user
 from app.core.rbac import ASSIGN, canonical_role, has_permission
@@ -116,32 +115,69 @@ def create_service_ticket(
 
     # CRITICAL BUSINESS RULES #10 & #11: Look up warranty records and evaluate validity at complaint date
     today = date.today()
-    war = db.query(WarrantyRecord).filter(WarrantyRecord.serial_number == clean_sn).first()
-
-    is_covered = False
-    if war and war.warranty_start <= today <= war.warranty_end:
-        is_covered = True
-    elif ser and ser.warranty_start and ser.warranty_end and ser.warranty_start <= today <= ser.warranty_end:
-        is_covered = True
+    warranty_records = db.query(WarrantyRecord).filter(
+        WarrantyRecord.serial_number == clean_sn
+    ).order_by(WarrantyRecord.id.desc()).all()
+    war = next(
+        (
+            record for record in warranty_records
+            if record.status in {"ACTIVE", "COVERED", "EXPIRING_SOON"}
+            and record.certificate_url
+            and record.activated_at
+            and record.activated_by
+            and record.warranty_start <= today <= record.warranty_end
+        ),
+        None,
+    )
+    is_covered = war is not None
+    warranty_pending = any(
+        record.status == "PENDING_ACTIVATION"
+        or (
+            record.status in {"ACTIVE", "COVERED", "EXPIRING_SOON"}
+            and not (record.certificate_url and record.activated_at and record.activated_by)
+        )
+        for record in warranty_records
+    )
+    warranty_expired = any(
+        (
+            record.status in {"ACTIVE", "COVERED", "EXPIRING_SOON", "EXPIRED"}
+            and record.certificate_url
+            and record.activated_at
+            and record.activated_by
+            and record.warranty_end < today
+        )
+        for record in warranty_records
+    )
 
     tkt_num = f"TKT-2026-{random.randint(1000, 9999)}"
     while db.query(ServiceTicket).filter(ServiceTicket.ticket_number == tkt_num).first():
         tkt_num = f"TKT-2026-{random.randint(1000, 9999)}"
 
-    # If covered: 0 charges for covered items
-    # If expired: generate estimate
+    # Do not charge a customer while warranty coverage is pending or unverified.
     if is_covered:
         warranty_status = "COVERED"
         labour = 0.0
         parts = 0.0
         total = 0.0
         approved_estimate = True
-    else:
+    elif warranty_pending:
+        warranty_status = "PENDING_ACTIVATION"
+        labour = 0.0
+        parts = 0.0
+        total = 0.0
+        approved_estimate = False
+    elif warranty_expired:
         warranty_status = "EXPIRED"
         labour = 1500.0
         parts = 2500.0
         total = labour + parts
         approved_estimate = False  # requires customer approval before paid work
+    else:
+        warranty_status = "NOT_VERIFIED"
+        labour = 0.0
+        parts = 0.0
+        total = 0.0
+        approved_estimate = False
 
     ticket = ServiceTicket(
         ticket_number=tkt_num,
@@ -165,18 +201,6 @@ def create_service_ticket(
         customer_confirmed=False
     )
     db.add(ticket)
-
-    # If covered, record company warranty repair expense
-    if is_covered and ser and ser.order_id:
-        exp = ProjectExpense(
-            order_id=ser.order_id,
-            category="WARRANTY_REPLACEMENT",
-            amount=800.0,
-            description=f"Warranty service coverage for ticket {tkt_num} (Serial: {clean_sn})",
-            expense_date=today,
-            recorded_by=current_user.name
-        )
-        db.add(exp)
 
     db.commit()
     db.refresh(ticket)
@@ -231,6 +255,14 @@ def update_service_ticket(
     if payload.technician_id is not None and not has_permission(db, current_user, "service", ASSIGN):
         raise HTTPException(status_code=403, detail="Service assignment permission is required.")
     if payload.technician_id is not None:
+        technician = db.query(Technician).filter(
+            Technician.id == payload.technician_id,
+            Technician.status == "ACTIVE",
+        ).first()
+        if not technician:
+            raise HTTPException(status_code=404, detail="Active technician not found.")
+        if technician.availability == "UNAVAILABLE":
+            raise HTTPException(status_code=409, detail="The selected technician is unavailable.")
         ticket.technician_id = payload.technician_id
     if "assigned_user_id" in payload.model_fields_set:
         ticket.assigned_user_id = _resolve_support_assignee(db, current_user, payload.assigned_user_id)

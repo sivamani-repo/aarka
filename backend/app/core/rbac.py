@@ -388,6 +388,12 @@ def request_permission(request: Request) -> Optional[Tuple[str, str]]:
         return ("unknown", VIEW)
 
     trailing = segments[2:]
+    if section == "technicians" and trailing == ["me", "availability"]:
+        return None
+    if section == "technicians" and trailing and trailing[-1] == "link-user":
+        return ("technicians", ASSIGN)
+    if section == "warranties" and trailing and trailing[-1] == "status":
+        return ("warranties", APPROVE)
     action = VIEW if request.method in {"GET", "HEAD"} else {
         "POST": CREATE,
         "PUT": EDIT,
