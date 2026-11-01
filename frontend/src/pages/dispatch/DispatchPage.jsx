@@ -89,11 +89,7 @@ export const DispatchPage = () => {
       const res = await dispatchesAPI.confirmDelivery(selectedDispatch.id, confirmData);
       setIsConfirmOpen(false);
       fetchData();
-      alert(
-        `Delivery confirmed.\n\n${res.data.message}\nWarranties pending manufacturer-term verification: ${
-          res.data.warranties_pending_activation?.join(', ') || 'none'
-        }`
-      );
+      alert(`✓ Delivery confirmed!\n\n${res.data.message}\nActivated Warranties: ${res.data.activated_warranties?.join(', ')}`);
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to confirm delivery');
     }
@@ -118,18 +114,6 @@ export const DispatchPage = () => {
       header: 'Customer',
       accessor: 'customer_name',
       render: (row) => <span style={{ fontWeight: '600' }}>{row.customer_name}</span>,
-    },
-    {
-      header: 'Stock Before / Dispatched / Remaining',
-      render: (row) => row.stock_lines?.length ? (
-        <div style={{ display: 'grid', gap: '4px', fontSize: '12px' }}>
-          {row.stock_lines.map((line) => (
-            <span key={line.product_id}>
-              {line.product_name}: {line.previous_stock ?? 'Not recorded'} / {line.dispatched_quantity} / {line.remaining_stock ?? 'Not recorded'}
-            </span>
-          ))}
-        </div>
-      ) : <span style={{ color: 'var(--text-muted)' }}>No stock snapshot recorded</span>,
     },
     {
       header: 'Dispatched Serials',
@@ -198,7 +182,7 @@ export const DispatchPage = () => {
 
       <DataTable
         title="Warehouse Dispatch & Delivery Confirmation"
-        subtitle="Serialized equipment is checked before dispatch; confirmed delivery records warranties pending certificate verification"
+        subtitle="MANDATORY RULES #7 & #8: Serialized equipment verified before dispatch; Delivery confirmation automatically activates warranties"
         columns={columns}
         data={dispatches}
         searchKey="delivery_reference"
@@ -296,7 +280,7 @@ export const DispatchPage = () => {
             <div><strong>Order:</strong> {selectedDispatch?.order_number}</div>
             <div><strong>Customer:</strong> {selectedDispatch?.customer_name}</div>
             <div style={{ marginTop: '4px', color: 'var(--color-primary-800)', fontWeight: '600' }}>
-              Delivery records the warranty period. Activation requires an uploaded manufacturer certificate and approval after customer-accepted installation.
+              CRITICAL RULE #8: Delivery confirmation automatically calculates warranty start date and activates manufacturer warranty certificates!
             </div>
           </div>
 

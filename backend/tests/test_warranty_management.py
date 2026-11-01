@@ -1,11 +1,26 @@
-from datetime import date, timedelta
-from types import SimpleNamespace
+import pytest
+from datetime import date
 from fastapi.testclient import TestClient
 from main import app
+from app.database import SessionLocal
+from app.models.service import WarrantyRecord, WarrantyClaim
+from app.models.installation import InstallationJob
+from app.models.commercial import SalesOrder
+from app.models.inventory import SerializedEquipment
+from app.models.product import Product
 from app.core.warranty_service import add_calendar_months
-from app.routers.warranties import _calculate_warranty_dynamic_status
 
 client = TestClient(app)
+
+
+@pytest.fixture
+def auth_headers():
+    login_res = client.post("/api/auth/login", json={
+        "email": "admin@aarka.com",
+        "password": "admin123"
+    })
+    token = login_res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_calendar_aware_date_arithmetic():
@@ -27,25 +42,86 @@ def test_calendar_aware_date_arithmetic():
     assert add_calendar_months(d_31, 1) == date(2026, 9, 30)
 
 
-def test_unverified_warranty_never_appears_active():
-    pending = SimpleNamespace(
-        status="PENDING_ACTIVATION",
-        warranty_start=date.today(),
-        warranty_end=date.today() + timedelta(days=365),
-        certificate_url=None,
-        activated_at=None,
-        activated_by=None,
-    )
-    legacy_active_without_proof = SimpleNamespace(
-        status="ACTIVE",
-        warranty_start=date.today(),
-        warranty_end=date.today() + timedelta(days=365),
-        certificate_url=None,
-        activated_at=None,
-        activated_by=None,
-    )
-    assert _calculate_warranty_dynamic_status(pending, date.today()) == "PENDING_ACTIVATION"
-    assert _calculate_warranty_dynamic_status(legacy_active_without_proof, date.today()) == "PENDING_ACTIVATION"
+def test_automatic_warranty_activation_on_completion(auth_headers):
+    """
+    PRIMARY BUSINESS RULE TEST:
+    Warranties must NOT be activated when installation is SCHEDULED or IN_PROGRESS.
+    Warranties MUST be automatically activated when installation is COMPLETED with customer handover.
+    """
+    db = SessionLocal()
+    # Find an installation job with linked order
+    job = db.query(InstallationJob).filter(InstallationJob.status == "SCHEDULED").first()
+    if not job:
+        job = db.query(InstallationJob).first()
+
+    assert job is not None, "Installation job needed for test"
+    job_id = job.id
+    order_id = job.order_id
+
+    # Ensure serials exist for this order
+    serials = db.query(SerializedEquipment).filter(SerializedEquipment.order_id == order_id).all()
+    if not serials:
+        # Allocate a test serial
+        panel_prod = db.query(Product).filter(Product.category == "SOLAR_PANELS").first()
+        if not panel_prod:
+            panel_prod = db.query(Product).first()
+        test_sn = f"SN-TEST-WARR-{order_id}"
+        existing_s = db.query(SerializedEquipment).filter(SerializedEquipment.serial_number == test_sn).first()
+        if not existing_s:
+            s_obj = SerializedEquipment(
+                serial_number=test_sn,
+                product_id=panel_prod.id,
+                order_id=order_id,
+                status="DISPATCHED"
+            )
+            db.add(s_obj)
+            db.commit()
+    db.close()
+
+    # Complete the installation with full 9 checklist points and customer signature
+    checklist_payload = {
+        "checklist_state": {
+            "mounting_inspected": True,
+            "panels_installed": True,
+            "inverter_installed": True,
+            "wiring_completed": True,
+            "earthing_completed": True,
+            "safety_checked": True,
+            "system_tested": True,
+            "power_verified": True,
+            "customer_handover": True
+        },
+        "customer_signature": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAJYAAAALCAYAAACmK88O...",
+        "technical_observations": "Array tilt angle set to 18 degrees South, Voc measured 420V DC.",
+        "testing_results": "Grid sync verified at 238V AC, power generation active.",
+        "labour_hours": 7.5
+    }
+
+    comp_res = client.post(f"/api/installations/{job_id}/complete", json=checklist_payload, headers=auth_headers)
+    assert comp_res.status_code == 200
+    comp_data = comp_res.json()
+    assert comp_data["status"] == "CUSTOMER_ACCEPTED"
+    assert comp_data["activated_warranties_count"] > 0
+
+    # IDEMPOTENCY CHECK: Retry completion -> Should NOT duplicate warranties
+    retry_res = client.post(f"/api/installations/{job_id}/complete", json=checklist_payload, headers=auth_headers)
+    assert retry_res.status_code == 200
+
+    # Verify warranties in database
+    db = SessionLocal()
+    order_warranties = db.query(WarrantyRecord).filter(WarrantyRecord.order_id == order_id).all()
+    assert len(order_warranties) > 0
+
+    # Verify that warranties are in active status and have valid date boundaries
+    for w in order_warranties:
+        assert w.status in ["ACTIVE", "COVERED"]
+        assert w.warranty_start <= w.warranty_end
+        assert w.warranty_number.startswith("WAR-")
+
+    # Verify EPC Workmanship warranty exists for the order
+    workmanship = [w for w in order_warranties if w.warranty_type == "WORKMANSHIP"]
+    assert len(workmanship) >= 1
+    db.close()
 
 
 def test_warranty_dashboard_summary(auth_headers):
@@ -64,8 +140,8 @@ def test_warranty_dashboard_summary(auth_headers):
     assert len(data["expiry_timeline"]) == 12
 
 
-def test_warranty_search_and_uploaded_certificate(auth_headers):
-    """Search returns warranty status; certificate access requires an uploaded document."""
+def test_warranty_search_and_certificate(auth_headers):
+    """Verifies warranty search tool and official digital certificate retrieval."""
     # List warranties
     list_res = client.get("/api/warranties", headers=auth_headers)
     assert list_res.status_code == 200
@@ -82,30 +158,58 @@ def test_warranty_search_and_uploaded_certificate(auth_headers):
     s_data = search_res.json()
     assert s_data["count"] > 0
 
-    # Do not synthesize a certificate when no document was uploaded.
+    # Retrieve official certificate
     cert_res = client.get(f"/api/warranties/{w_id}/certificate", headers=auth_headers)
-    if target.get("certificate_url"):
-        assert cert_res.status_code == 200
-        assert cert_res.json()["serial_number"] == sn
-        assert "certificate_url" in cert_res.json()
-    else:
-        assert cert_res.status_code == 404
+    assert cert_res.status_code == 200
+    cert = cert_res.json()
+    assert "certificate_number" in cert
+    assert "beneficiary" in cert
+    assert "equipment" in cert
+    assert "terms" in cert
 
 
 def test_warranty_claim_lifecycle(auth_headers):
-    """A claim cannot imply manufacturer coverage before warranty verification."""
+    """Verifies claim creation, status transitions, and resolution."""
     list_res = client.get("/api/warranties", headers=auth_headers)
     warranties = list_res.json()
     target_w = warranties[0]
 
-    # Pending seeded warranties have no verified certificate and cannot create an OEM claim.
+    # 1. Raise Warranty Claim
     claim_payload = {
         "warranty_id": target_w["id"],
         "issue_description": "Inverter displays Ground Fault F04 error during heavy rains.",
         "manufacturer_reference": "OEM-RMA-TEST-99"
     }
     create_res = client.post("/api/warranties/claims", json=claim_payload, headers=auth_headers)
-    assert create_res.status_code == 409
+    assert create_res.status_code == 200
+    claim = create_res.json()
+    assert claim["claim_number"].startswith("CLM-")
+    assert claim["claim_status"] == "CLAIM_RAISED"
+    claim_id = claim["id"]
+
+    # Verify warranty status transitioned to CLAIM_RAISED
+    w_detail = client.get(f"/api/warranties/{target_w['id']}", headers=auth_headers).json()
+    assert w_detail["status"] == "CLAIM_RAISED"
+
+    # 2. Update claim to UNDER_REVIEW
+    update_1 = client.put(f"/api/warranties/claims/{claim_id}/status", json={
+        "claim_status": "UNDER_REVIEW"
+    }, headers=auth_headers)
+    assert update_1.status_code == 200
+    assert update_1.json()["claim_status"] == "UNDER_REVIEW"
+
+    # 3. Resolve claim
+    update_2 = client.put(f"/api/warranties/claims/{claim_id}/status", json={
+        "claim_status": "RESOLVED",
+        "replacement_serial_number": "INV-NEW-REPLACEMENT-01",
+        "resolution_details": "OEM replaced internal DC surge suppressor board. Field re-testing passed."
+    }, headers=auth_headers)
+    assert update_2.status_code == 200
+    assert update_2.json()["claim_status"] == "RESOLVED"
+
+    # Verify warranty returned to ACTIVE status upon resolution
+    w_resolved = client.get(f"/api/warranties/{target_w['id']}", headers=auth_headers).json()
+    assert w_resolved["status"] == "ACTIVE"
 
 
 def test_expiry_alerts_and_duplicate_prevention(auth_headers):

@@ -10,16 +10,13 @@ class Technician(Base):
     name = Column(String(120), nullable=False)
     phone = Column(String(30), nullable=False)
     email = Column(String(150), nullable=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, unique=True)
     skills = Column(String(200), default="Rooftop, Inverters, Electrical")
     experience_years = Column(Integer, default=3)
     availability = Column(String(50), default="AVAILABLE")
-    availability_updated_at = Column(DateTime(timezone=True), nullable=True, server_default=func.now())
     status = Column(String(50), default="ACTIVE")
     employment_status = Column(String(50), default="FULL_TIME")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    user = relationship("User")
     surveys = relationship("SiteSurvey", back_populates="technician")
 
 

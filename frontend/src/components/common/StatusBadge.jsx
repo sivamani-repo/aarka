@@ -20,7 +20,6 @@ export const StatusBadge = ({ status }) => {
       'CLOSED',
       'DELIVERED',
       'AVAILABLE',
-      'BUSY',
       'APPROVED_BY_OEM',
       'REPAIRED',
       'DISBURSED',
@@ -69,8 +68,7 @@ export const StatusBadge = ({ status }) => {
       'CLAIM_RAISED',
       'FEASIBILITY_REJECTED',
       'RE_UPLOAD_REQUIRED',
-      'POTENTIALLY_NOT_ELIGIBLE',
-      'UNAVAILABLE',
+      'POTENTIALLY_NOT_ELIGIBLE'
     ].includes(normalized)
   ) {
     badgeClass = 'badge-danger';
@@ -83,7 +81,6 @@ export const StatusBadge = ({ status }) => {
       'CONFIRMED',
       'DISPATCHED',
       'ASSIGNED',
-      'BUSY',
       'REPLACEMENT_IN_PROGRESS'
     ].includes(normalized)
   ) {
@@ -98,3 +95,5 @@ export const StatusBadge = ({ status }) => {
 };
 
 export default StatusBadge;
+
+

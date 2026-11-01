@@ -9,6 +9,7 @@ import {
   Search,
   Plus,
   FileText,
+  Printer,
   AlertTriangle,
   RefreshCw,
   Wrench,
@@ -37,12 +38,10 @@ import { DataTable } from '../../components/common/DataTable';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Modal } from '../../components/common/Modal';
 import { StatCard } from '../../components/common/StatCard';
-import { useAuth } from '../../context/AuthContext';
 
 const PALETTE = ['#047857', '#0284c7', '#d97706', '#7c3aed', '#dc2626', '#059669'];
 
 export const WarrantiesPage = () => {
-  const { hasPermission } = useAuth();
   const [activeTab, setActiveTab] = useState('OVERVIEW'); // OVERVIEW | ALL_WARRANTIES | EXPIRING | CLAIMS | VERIFY
   const [warranties, setWarranties] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -134,36 +133,7 @@ export const WarrantiesPage = () => {
     } catch (err) {
       console.error('Failed to load certificate:', err);
       setCertificateModal({ open: false, data: null, loading: false });
-      setFeedback({ type: 'error', message: err.response?.data?.detail || 'Could not load the verified certificate.' });
-    }
-  };
-
-  const handleUploadCertificate = async (warranty, file) => {
-    if (!file) return;
-    setActionLoading(true);
-    const formData = new FormData();
-    formData.append('file', file);
-    try {
-      await warrantiesAPI.uploadCertificate(warranty.id, formData);
-      setFeedback({ type: 'success', message: 'Manufacturer certificate uploaded for verification.' });
-      await fetchData();
-    } catch (err) {
-      setFeedback({ type: 'error', message: err.response?.data?.detail || 'Certificate upload failed.' });
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleActivateWarranty = async (warranty) => {
-    setActionLoading(true);
-    try {
-      await warrantiesAPI.updateStatus(warranty.id, { status: 'ACTIVE' });
-      setFeedback({ type: 'success', message: 'Warranty activated after verification.' });
-      await fetchData();
-    } catch (err) {
-      setFeedback({ type: 'error', message: err.response?.data?.detail || 'Warranty activation failed.' });
-    } finally {
-      setActionLoading(false);
+      setFeedback({ type: 'error', message: 'Could not generate certificate details.' });
     }
   };
 
@@ -247,7 +217,7 @@ export const WarrantiesPage = () => {
       accessor: 'warranty_number',
       render: (row) => (
         <span style={{ fontWeight: '700', color: 'var(--color-primary-800)', fontFamily: 'var(--font-display)', fontSize: '13px' }}>
-          {row.warranty_number || 'Pending'}
+          {row.warranty_number || 'WAR-AUTO'}
         </span>
       ),
     },
@@ -327,41 +297,10 @@ export const WarrantiesPage = () => {
             onClick={() => handleOpenCertificate(row)}
             className="btn btn-secondary"
             style={{ padding: '4px 8px', fontSize: '11px', display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-            title={row.certificate_url ? 'View the uploaded warranty certificate' : 'No certificate has been uploaded'}
-            disabled={!row.certificate_url}
+            title="View Official Certificate"
           >
-            <FileText size={12} /> View document
+            <FileText size={12} /> Certificate
           </button>
-          {row.status === 'PENDING_ACTIVATION' && hasPermission('warranties', 'CREATE') && (
-            <label
-              className="btn btn-secondary"
-              style={{ padding: '4px 8px', fontSize: '11px', cursor: 'pointer' }}
-            >
-              Upload certificate
-              <input
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                hidden
-                disabled={actionLoading}
-                onChange={(event) => {
-                  handleUploadCertificate(row, event.target.files?.[0]);
-                  event.target.value = '';
-                }}
-              />
-            </label>
-          )}
-          {row.status === 'PENDING_ACTIVATION' && row.certificate_url && hasPermission('warranties', 'APPROVE') && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              style={{ padding: '4px 8px', fontSize: '11px' }}
-              onClick={() => handleActivateWarranty(row)}
-              disabled={actionLoading}
-              title="Verify customer-confirmed delivery, installation acceptance, serial match, and certificate"
-            >
-              Verify & activate
-            </button>
-          )}
           <button
             onClick={() => setClaimModal({ open: true, warranty: row })}
             className="btn btn-secondary"
@@ -440,10 +379,10 @@ export const WarrantiesPage = () => {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--color-primary-950)', margin: 0, fontFamily: 'var(--font-display)' }}>
-            Equipment Warranty Records
+            Equipment Warranty Assurance & Lifecycle Desk
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '13px', margin: '4px 0 0 0' }}>
-            Certificate-backed activation after confirmed delivery and customer-accepted installation • Track submitted manufacturer claims
+            Automated equipment warranty activation on installation completion • Separate product & performance terms • OEM RMA Claims
           </p>
         </div>
         <div style={{ display: 'flex', gap: '8px' }}>
@@ -501,7 +440,7 @@ export const WarrantiesPage = () => {
           { id: 'OVERVIEW', label: 'Warranty Dashboard & Analytics', icon: ShieldCheck },
           { id: 'ALL_WARRANTIES', label: `Registered Warranties (${warranties.length})`, icon: FileText },
           { id: 'EXPIRING', label: `Expiring Soon (${alerts?.total_expiring_soon || 0})`, icon: Clock },
-          { id: 'CLAIMS', label: `Claims & RMA (${claims.length})`, icon: AlertTriangle },
+          { id: 'CLAIMS', label: `Claims & OEM RMA (${claims.length})`, icon: AlertTriangle },
           { id: 'VERIFY', label: 'Instant Serial Verification Tool', icon: Barcode },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -569,7 +508,7 @@ export const WarrantiesPage = () => {
               title="Open Warranty Claims"
               value={summary?.open_claims_count || claims.length}
               icon={AlertTriangle}
-              trend="Active manufacturer claims"
+              trend="Active OEM RMA tickets"
               variant="danger"
             />
           </div>
@@ -651,10 +590,10 @@ export const WarrantiesPage = () => {
           >
             <div>
               <div style={{ fontSize: '14px', fontWeight: '700', color: '#0c2318' }}>
-                Warranty activation requires verification
+                AARKA Automated EPC Warranty Handover Protocol Active
               </div>
               <p style={{ fontSize: '12px', color: '#166534', margin: '4px 0 0 0' }}>
-                Delivery records remain pending until an authorized reviewer verifies the uploaded manufacturer certificate, customer-confirmed delivery, and customer-accepted installation.
+                Every completed solar installation automatically activates separate 10-yr panel product, 25-yr panel performance, 5-yr inverter, and 5-yr EPC workmanship warranties.
               </p>
             </div>
             <button onClick={() => setActiveTab('ALL_WARRANTIES')} className="btn btn-accent" style={{ fontSize: '12px' }}>
@@ -830,8 +769,8 @@ export const WarrantiesPage = () => {
       {activeTab === 'CLAIMS' && (
         <div>
           <DataTable
-            title="Warranty Claims & RMA Register"
-            subtitle="Record manufacturer claim stages, repair details, and replacement serials"
+            title="Warranty Claims & OEM RMA Register"
+            subtitle="Manage manufacturer repair, defect claims, and replacement serial tracking"
             columns={claimColumns}
             data={claims}
             searchKey="claim_number"
@@ -845,13 +784,13 @@ export const WarrantiesPage = () => {
         <div>
           <div className="aarka-card" style={{ maxWidth: '800px', margin: '0 auto', backgroundColor: '#0c2318', color: '#ffffff', padding: '32px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#a7e4c2', fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', marginBottom: '8px' }}>
-              <ShieldCheck size={18} /> AARKA Warranty Record Lookup
+              <ShieldCheck size={18} /> Official Equipment Warranty Validation System
             </div>
             <h2 style={{ fontSize: '22px', fontWeight: '800', marginBottom: '8px', fontFamily: 'var(--font-display)' }}>
               Scan or Enter Equipment Serial Number
             </h2>
             <p style={{ fontSize: '13px', color: '#94bca7', marginBottom: '20px' }}>
-              Look up warranty records stored in AARKA. This does not independently verify coverage with a manufacturer.
+              Instant verification for field technicians, service personnel, and customer support representatives.
             </p>
 
             <form onSubmit={handleQuickVerify} style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
@@ -935,33 +874,128 @@ export const WarrantiesPage = () => {
         <Modal
           isOpen={certificateModal.open}
           onClose={() => setCertificateModal({ open: false, data: null, loading: false })}
-          title="Verified Warranty Document"
+          title="Digital Warranty Certificate"
         >
           {certificateModal.loading ? (
             <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
               <RefreshCw className="animate-spin" size={24} style={{ margin: '0 auto 8px auto' }} />
-              Loading certificate reference...
+              Generating digital certificate...
             </div>
           ) : certificateModal.data ? (
-            <div style={{ display: 'grid', gap: '12px' }}>
-              <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                This record references an uploaded certificate. AARKA does not generate or replace manufacturer warranty documents.
-              </p>
-              <div style={{ fontSize: '13px' }}>
-                <strong>Warranty reference:</strong> {certificateModal.data.warranty_number || 'Not provided'}
-              </div>
-              <div style={{ fontSize: '13px' }}>
-                <strong>Serial number:</strong> {certificateModal.data.serial_number}
-              </div>
-              <a
-                href={certificateModal.data.certificate_url}
-                target="_blank"
-                rel="noreferrer"
-                className="btn btn-secondary"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', justifySelf: 'start' }}
+            <div>
+              {/* Printable Certificate Box */}
+              <div
+                id="printable-warranty-certificate"
+                style={{
+                  padding: '28px',
+                  border: '2px solid #0c2318',
+                  borderRadius: 'var(--radius-lg)',
+                  backgroundColor: '#ffffff',
+                  color: '#0c2318',
+                  position: 'relative',
+                }}
               >
-                <ExternalLink size={14} /> Open uploaded certificate
-              </a>
+                {/* Header with Brand */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #0c2318', paddingBottom: '16px', marginBottom: '20px' }}>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '20px', fontWeight: '800', color: '#0c2318', fontFamily: 'var(--font-display)' }}>
+                      AARKA SOLAR OPERATIONS
+                    </h2>
+                    <span style={{ fontSize: '11px', letterSpacing: '0.1em', textTransform: 'uppercase', color: '#047857', fontWeight: '700' }}>
+                      Official Equipment Warranty & Performance Certificate
+                    </span>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', fontFamily: 'monospace' }}>
+                      {certificateModal.data.certificate_number}
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Issue Date: {certificateModal.data.issue_date}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Beneficiary & Site Info */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px', backgroundColor: '#f7f8f5', padding: '14px', borderRadius: '8px' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#6b7280', fontWeight: '700' }}>Registered Beneficiary</div>
+                    <div style={{ fontWeight: '700', fontSize: '14px' }}>{certificateModal.data.beneficiary.customer_name}</div>
+                    <div style={{ fontSize: '12px', color: '#4b5563' }}>{certificateModal.data.beneficiary.address}</div>
+                    <div style={{ fontSize: '12px', color: '#4b5563' }}>Phone: {certificateModal.data.beneficiary.phone}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#6b7280', fontWeight: '700' }}>System Installation Reference</div>
+                    <div style={{ fontWeight: '700', fontSize: '14px' }}>Order #{certificateModal.data.beneficiary.order_number}</div>
+                    <div style={{ fontSize: '12px', color: '#4b5563' }}>Installed Capacity: {certificateModal.data.beneficiary.capacity_kw} kW Grid-Tied Solar</div>
+                    <div style={{ fontSize: '12px', color: '#047857', fontWeight: '600' }}>Status: {certificateModal.data.status}</div>
+                  </div>
+                </div>
+
+                {/* Equipment Specifications */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', color: '#0c2318', marginBottom: '8px' }}>
+                    Guaranteed Equipment Details
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '6px 0', color: '#6b7280', width: '35%' }}>Equipment Name:</td>
+                        <td style={{ padding: '6px 0', fontWeight: '600' }}>{certificateModal.data.equipment.product_name}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '6px 0', color: '#6b7280' }}>Serial Number:</td>
+                        <td style={{ padding: '6px 0', fontWeight: '700', fontFamily: 'monospace', color: '#b45309' }}>
+                          {certificateModal.data.equipment.serial_number}
+                        </td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '6px 0', color: '#6b7280' }}>Manufacturer & Model:</td>
+                        <td style={{ padding: '6px 0' }}>{certificateModal.data.equipment.manufacturer} ({certificateModal.data.equipment.model})</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                        <td style={{ padding: '6px 0', color: '#6b7280' }}>Warranty Type & Tenure:</td>
+                        <td style={{ padding: '6px 0', fontWeight: '700', color: '#047857' }}>
+                          {certificateModal.data.warranty_type} ({certificateModal.data.duration_years} Years)
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '6px 0', color: '#6b7280' }}>Validity Expiry Date:</td>
+                        <td style={{ padding: '6px 0', fontWeight: '700' }}>{certificateModal.data.expiry_date}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Coverage Terms & SLA */}
+                <div style={{ fontSize: '11px', color: '#4b5563', borderTop: '1px solid #e5e7eb', paddingTop: '14px', marginBottom: '20px' }}>
+                  <div style={{ fontWeight: '700', color: '#0c2318', marginBottom: '4px' }}>Terms & SLA:</div>
+                  <p style={{ margin: '0 0 4px 0' }}>{certificateModal.data.terms.summary}</p>
+                  <p style={{ margin: '0 0 4px 0' }}><em>Exclusions:</em> {certificateModal.data.terms.exclusions}</p>
+                  <p style={{ margin: 0 }}><strong>SLA:</strong> {certificateModal.data.terms.service_sla}</p>
+                </div>
+
+                {/* Sign-off Seal */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderTop: '2px solid #0c2318', paddingTop: '16px' }}>
+                  <div style={{ fontSize: '11px', color: '#6b7280' }}>
+                    Helpline: {certificateModal.data.issuer.support_helpline} • {certificateModal.data.issuer.portal}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontWeight: '700', fontSize: '12px' }}>AARKA Quality & Engineering Team</div>
+                    <div style={{ fontSize: '11px', color: '#047857' }}>Certified Solar Operations</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Print Action */}
+              <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button
+                  onClick={() => window.print()}
+                  className="btn btn-accent"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <Printer size={16} /> Print Official Certificate
+                </button>
+              </div>
             </div>
           ) : null}
         </Modal>

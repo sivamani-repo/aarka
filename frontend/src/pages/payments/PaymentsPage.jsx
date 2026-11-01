@@ -4,10 +4,8 @@ import { paymentsAPI, ordersAPI } from '../../services/api';
 import { DataTable } from '../../components/common/DataTable';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Modal } from '../../components/common/Modal';
-import { useAuth } from '../../context/AuthContext';
 
 export const PaymentsPage = () => {
-  const { hasPermission } = useAuth();
   const [payments, setPayments] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,26 +64,10 @@ export const PaymentsPage = () => {
         notes: newPayment.notes,
       });
       setIsRecordOpen(false);
-      await fetchData();
-      alert('Payment recorded as pending. An authorized finance user must verify it before the order balance is updated.');
+      fetchData();
+      alert('Payment successfully recorded and allocated to Sales Order!');
     } catch (err) {
       alert(err.response?.data?.detail || 'Failed to record payment');
-    }
-  };
-
-  const handleVerifyPayment = async (payment) => {
-    const confirmationNote = window.prompt(
-      'Enter how the transaction was verified (minimum 8 characters):'
-    );
-    if (!confirmationNote?.trim()) return;
-    try {
-      await paymentsAPI.verifyPayment(payment.id, {
-        confirmation_note: confirmationNote.trim(),
-      });
-      await fetchData();
-      alert('Payment verified and applied to the sales order.');
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to verify payment');
     }
   };
 
@@ -119,7 +101,7 @@ export const PaymentsPage = () => {
       ),
     },
     {
-      header: 'Payment Amount',
+      header: 'Amount Paid',
       render: (row) => (
         <span style={{ fontWeight: '800', color: 'var(--color-primary-700)', fontSize: '15px' }}>
           ₹{row.amount?.toLocaleString()}
@@ -147,18 +129,9 @@ export const PaymentsPage = () => {
     {
       header: 'Actions',
       render: (row) => (
-        <div style={{ display: 'flex', gap: '8px' }}>
-          {row.status === 'PENDING' && hasPermission('payments', 'APPROVE') && (
-            <button className="btn btn-primary btn-sm" onClick={() => handleVerifyPayment(row)}>
-              <CheckCircle size={13} /> Verify
-            </button>
-          )}
-          {row.status === 'COMPLETED' ? (
-            <button className="btn btn-secondary btn-sm" onClick={() => openReceipt(row)}>
-              <FileText size={13} /> Receipt
-            </button>
-          ) : <span className="badge badge-warning">No receipt until verified</span>}
-        </div>
+        <button className="btn btn-secondary btn-sm" onClick={() => openReceipt(row)}>
+          <FileText size={13} /> Receipt
+        </button>
       ),
     },
   ];
@@ -173,7 +146,7 @@ export const PaymentsPage = () => {
 
       <DataTable
         title="Accounts Receivable & Verified Collections"
-        subtitle="Payments remain pending until an authorized finance user verifies the transaction."
+        subtitle="MANDATORY RULE: Payments strictly audited; Cannot exceed total contract payable"
         columns={columns}
         data={payments}
         searchKey="payment_number"
@@ -229,7 +202,7 @@ export const PaymentsPage = () => {
                 onChange={(e) => setNewPayment({ ...newPayment, amount: e.target.value })}
               />
               <p style={{ fontSize: '11px', color: 'var(--text-light)', marginTop: '4px' }}>
-                Initial advances must be at least 10%; confirmed and pending payments cannot exceed the order total.
+                Enforces Rule #16: Payment cannot exceed balance due of ₹{selectedOrderInfo?.balance_due?.toLocaleString()}.
               </p>
             </div>
 
@@ -289,7 +262,7 @@ export const PaymentsPage = () => {
               Cancel
             </button>
             <button type="submit" className="btn btn-primary">
-              Submit for Verification
+              Verify & Record Payment
             </button>
           </div>
         </form>

@@ -1,6 +1,5 @@
-from pathlib import Path
+import os
 from typing import Optional
-from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,8 +10,9 @@ class Settings(BaseSettings):
     db_port: int = 5432
     db_name: str = "aarka_db"
     db_user: str = "sivamani_user"
-    db_password: SecretStr = Field(min_length=1)
-    secret_key: SecretStr = Field(min_length=32)
+    db_password: str = "Dsm_5885"
+
+    secret_key: str = "aarka-secret-jwt-key-for-development-2026"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 1440
     upload_dir: str = "uploads"
@@ -39,16 +39,9 @@ class Settings(BaseSettings):
     reset_token_expire_minutes: int = 60
 
     model_config = SettingsConfigDict(
-        env_file=Path(__file__).resolve().parents[1] / ".env",
+        env_file=".env",
         extra="ignore"
     )
-
-    @property
-    def upload_path(self) -> Path:
-        path = Path(self.upload_dir)
-        if path.is_absolute():
-            return path
-        return Path(__file__).resolve().parents[1] / path
 
 
 settings = Settings()

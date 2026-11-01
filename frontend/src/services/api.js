@@ -168,7 +168,6 @@ export const paymentsAPI = {
   getPayments: (params) => api.get('/api/payments', { params }),
   getAll: (params) => api.get('/api/payments', { params }),
   recordPayment: (data) => api.post('/api/payments', data),
-  verifyPayment: (paymentId, data) => api.post(`/api/payments/${paymentId}/verify`, data),
   create: (data) => api.post('/api/payments', data),
 };
 export const paymentsApi = paymentsAPI;
@@ -211,12 +210,8 @@ export const dispatchesApi = dispatchesAPI;
 export const techniciansAPI = {
   getTechnicians: (params) => api.get('/api/technicians', { params }),
   getAll: (params) => api.get('/api/technicians', { params }),
-  getEligibleUsers: () => api.get('/api/technicians/eligible-users'),
   createTechnician: (data) => api.post('/api/technicians', data),
   create: (data) => api.post('/api/technicians', data),
-  linkUser: (id, user_id) => api.patch(`/api/technicians/${id}/link-user`, { user_id }),
-  getMyAvailability: () => api.get('/api/technicians/me/availability'),
-  updateMyAvailability: (availability) => api.patch('/api/technicians/me/availability', { availability }),
   getTechnicianSchedule: (id) => api.get(`/api/technicians/${id}/schedule`),
 };
 export const techniciansApi = techniciansAPI;
@@ -247,9 +242,6 @@ export const warrantiesAPI = {
   triggerExpiryAlerts: () => api.post('/api/warranties/expiry-alerts/trigger'),
   getWarranty: (id) => api.get(`/api/warranties/${id}`),
   getCertificate: (id) => api.get(`/api/warranties/${id}/certificate`),
-  uploadCertificate: (id, formData) => api.post(`/api/warranties/${id}/certificate`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  }),
   updateStatus: (id, data) => api.put(`/api/warranties/${id}/status`, data),
   searchWarranties: (query) => api.get('/api/warranties/search', { params: { query } }),
   search: (query) => api.get('/api/warranties/search', { params: { query } }),

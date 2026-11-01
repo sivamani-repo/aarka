@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Wrench, Phone, Mail, Calendar, Link2 } from 'lucide-react';
+import { Plus, Wrench, Phone, Mail, Award, Calendar, CheckCircle } from 'lucide-react';
 import { techniciansAPI } from '../../services/api';
 import { DataTable } from '../../components/common/DataTable';
 import { StatusBadge } from '../../components/common/StatusBadge';
@@ -12,10 +12,6 @@ export const TechniciansPage = () => {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [selectedTech, setSelectedTech] = useState(null);
   const [techSchedule, setTechSchedule] = useState(null);
-  const [eligibleUsers, setEligibleUsers] = useState([]);
-  const [isLinkOpen, setIsLinkOpen] = useState(false);
-  const [linkingTech, setLinkingTech] = useState(null);
-  const [selectedUserId, setSelectedUserId] = useState('');
 
   const [newTech, setNewTech] = useState({
     name: '',
@@ -27,26 +23,20 @@ export const TechniciansPage = () => {
     employment_status: 'FULL_TIME',
   });
 
-  const fetchTechnicians = async (showLoading = true) => {
-    if (showLoading) setLoading(true);
+  const fetchTechnicians = async () => {
+    setLoading(true);
     try {
-      const [res, usersRes] = await Promise.all([
-        techniciansAPI.getTechnicians(),
-        techniciansAPI.getEligibleUsers(),
-      ]);
+      const res = await techniciansAPI.getTechnicians();
       setTechnicians(res.data);
-      setEligibleUsers(usersRes.data);
     } catch (err) {
       console.error('Failed to load technicians:', err);
     } finally {
-      if (showLoading) setLoading(false);
+      setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchTechnicians();
-    const intervalId = window.setInterval(() => fetchTechnicians(false), 15000);
-    return () => window.clearInterval(intervalId);
   }, []);
 
   const handleAddTech = async (e) => {
@@ -73,32 +63,6 @@ export const TechniciansPage = () => {
       alert('Failed to load technician schedule');
     }
   };
-
-  const openLinkAccount = (tech) => {
-    setLinkingTech(tech);
-    setSelectedUserId(tech.user_id ? String(tech.user_id) : '');
-    setIsLinkOpen(true);
-  };
-
-  const handleLinkAccount = async (event) => {
-    event.preventDefault();
-    try {
-      await techniciansAPI.linkUser(
-        linkingTech.id,
-        selectedUserId ? Number(selectedUserId) : null,
-      );
-      setIsLinkOpen(false);
-      await fetchTechnicians();
-    } catch (err) {
-      alert(err.response?.data?.detail || 'Failed to link technician account');
-    }
-  };
-
-  const linkedElsewhere = new Set(
-    technicians
-      .filter((tech) => tech.id !== linkingTech?.id && tech.user_id)
-      .map((tech) => tech.user_id),
-  );
 
   const columns = [
     {
@@ -137,25 +101,6 @@ export const TechniciansPage = () => {
       render: (row) => <StatusBadge status={row.availability} />,
     },
     {
-      header: 'Login Account',
-      render: (row) => {
-        const account = eligibleUsers.find((user) => user.id === row.user_id);
-        return (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>{account ? account.email : 'Not linked'}</span>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={() => openLinkAccount(row)}
-              title={`Link a login account to ${row.name}`}
-            >
-              <Link2 size={13} /> Link
-            </button>
-          </div>
-        );
-      },
-    },
-    {
       header: 'Actions',
       render: (row) => (
         <button className="btn btn-secondary btn-sm" onClick={() => openSchedule(row)}>
@@ -174,7 +119,7 @@ export const TechniciansPage = () => {
       </div>
 
       <DataTable
-        title={`Field Technician Workforce (${technicians.length} profiles)`}
+        title="Field Technician Workforce (15 Personnel)"
         subtitle="Manage rooftop technicians, certifications, skill sets, and job deployments"
         columns={columns}
         data={technicians}
@@ -246,42 +191,6 @@ export const TechniciansPage = () => {
             </button>
             <button type="submit" className="btn btn-primary">
               Register Technician
-            </button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        isOpen={isLinkOpen}
-        onClose={() => setIsLinkOpen(false)}
-        title={`Link Login Account: ${linkingTech?.name || ''}`}
-      >
-        <form onSubmit={handleLinkAccount} className="space-y-4">
-          <p className="text-sm text-stone-600">
-            Link an existing active Solar Technician account. This does not create a login or change its password.
-          </p>
-          <select
-            value={selectedUserId}
-            onChange={(event) => setSelectedUserId(event.target.value)}
-            className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm"
-          >
-            <option value="">No linked account</option>
-            {eligibleUsers.map((user) => (
-              <option
-                key={user.id}
-                value={user.id}
-                disabled={linkedElsewhere.has(user.id)}
-              >
-                {user.name} · {user.email}{linkedElsewhere.has(user.id) ? ' (already linked)' : ''}
-              </option>
-            ))}
-          </select>
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn btn-secondary" onClick={() => setIsLinkOpen(false)}>
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary">
-              Save Link
             </button>
           </div>
         </form>

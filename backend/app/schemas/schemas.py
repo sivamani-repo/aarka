@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any, Literal
+from typing import List, Optional, Dict, Any
 from datetime import date, datetime
 import re
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -206,27 +206,19 @@ class CustomerOut(BaseModel):
 
 
 class PublicEnquiryRequest(BaseModel):
-    customer_name: str = Field(min_length=2, max_length=120)
-    phone: str = Field(min_length=8, max_length=30)
+    customer_name: str
+    phone: str
     email: Optional[str] = None
-    address: str = Field(min_length=5, max_length=500)
-    city: Optional[str] = Field(default="Hyderabad", max_length=100)
+    address: str
+    city: Optional[str] = "Hyderabad"
     customer_category: str = "Residential"
     preferred_contact_method: str = "Phone"
     lead_source: str = "Website"
-    required_capacity: float = Field(default=3.0, gt=0, le=1000)
+    required_capacity: float = 3.0
     solar_requirement: str = "On-Grid"
-    monthly_electricity_bill: float = Field(default=2500.0, ge=0)
+    monthly_electricity_bill: float = 2500.0
     subsidy_requirement: bool = True
     additional_requirements: Optional[str] = None
-    consent: bool
-
-    @field_validator("consent")
-    @classmethod
-    def require_consent(cls, value: bool) -> bool:
-        if not value:
-            raise ValueError("Consent is required to submit an enquiry.")
-        return value
 
 
 class LeadCreate(BaseModel):
@@ -315,19 +307,10 @@ class TechnicianCreate(BaseModel):
     name: str
     phone: str
     email: Optional[str] = None
-    user_id: Optional[int] = None
     skills: str = "Rooftop, Inverters, Electrical"
     experience_years: int = 3
-    availability: Literal["AVAILABLE", "UNAVAILABLE"] = "AVAILABLE"
+    availability: str = "AVAILABLE"
     employment_status: str = "FULL_TIME"
-
-
-class TechnicianAvailabilityUpdate(BaseModel):
-    availability: Literal["AVAILABLE", "UNAVAILABLE"]
-
-
-class TechnicianAccountLink(BaseModel):
-    user_id: Optional[int] = None
 
 
 class TechnicianOut(BaseModel):
@@ -335,11 +318,9 @@ class TechnicianOut(BaseModel):
     name: str
     phone: str
     email: Optional[str] = None
-    user_id: Optional[int] = None
     skills: str
     experience_years: int
     availability: str
-    availability_updated_at: Optional[datetime] = None
     status: str
     employment_status: str
     active_assignments: Optional[int] = 0
@@ -581,15 +562,11 @@ class OrderOut(BaseModel):
 class PaymentCreate(BaseModel):
     order_id: int
     customer_id: int
-    amount: float = Field(gt=0)
+    amount: float
     method: str = "UPI"
     reference: Optional[str] = None
     payment_date: Optional[date] = None
     notes: Optional[str] = None
-
-
-class PaymentVerification(BaseModel):
-    confirmation_note: str = Field(min_length=8, max_length=500)
 
 
 class PaymentOut(BaseModel):
@@ -687,14 +664,6 @@ class SerialOut(BaseModel):
 
 
 # ================= DISPATCH =================
-class DispatchStockLine(BaseModel):
-    product_id: int
-    product_name: str
-    previous_stock: Optional[int] = None
-    dispatched_quantity: int
-    remaining_stock: Optional[int] = None
-
-
 class DispatchCreate(BaseModel):
     order_id: int
     delivery_reference: Optional[str] = None
@@ -727,7 +696,6 @@ class DispatchOut(BaseModel):
     delivery_proof_url: Optional[str] = None
     dispatched_by: Optional[str] = None
     serial_numbers: str
-    stock_lines: List[DispatchStockLine] = Field(default_factory=list)
     notes: Optional[str] = None
     created_at: Optional[datetime] = None
 
@@ -817,8 +785,6 @@ class WarrantyOut(BaseModel):
     status: str
     coverage_terms: str
     certificate_url: Optional[str] = None
-    activated_at: Optional[datetime] = None
-    activated_by: Optional[int] = None
     notes: Optional[str] = None
     open_claims_count: Optional[int] = 0
     created_at: Optional[datetime] = None

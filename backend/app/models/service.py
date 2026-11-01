@@ -23,8 +23,6 @@ class WarrantyRecord(Base):
     status = Column(String(60), default="ACTIVE")  # PENDING_ACTIVATION | ACTIVE | EXPIRING_SOON | EXPIRED | CLAIM_RAISED | UNDER_REVIEW | RESOLVED
     coverage_terms = Column(Text, default="100% parts & labor covered under manufacturer warranty policy")
     certificate_url = Column(String(255), nullable=True)
-    activated_at = Column(DateTime(timezone=True), nullable=True)
-    activated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     notes = Column(Text, nullable=True)
     expiry_alert_90d_sent = Column(Boolean, default=False)
     expiry_alert_30d_sent = Column(Boolean, default=False)

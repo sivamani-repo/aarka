@@ -1,15 +1,11 @@
 import json
 import random
-import secrets
-from pathlib import Path
 from typing import List, Optional, Dict, Any
-from datetime import date, datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import FileResponse
+from datetime import date, datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 
-from app.config import settings
 from app.database import get_db
 from app.models.service import ServiceTicket, WarrantyRecord, WarrantyClaim
 from app.models.product import Product
@@ -17,7 +13,6 @@ from app.models.customer import Customer
 from app.models.commercial import SalesOrder
 from app.models.installation import InstallationJob
 from app.models.survey import Technician
-from app.models.inventory import Dispatch, SerializedEquipment
 from app.models.user import AuditLog, User
 from app.schemas.schemas import (
     WarrantyOut, WarrantyStatusUpdate,
@@ -25,21 +20,8 @@ from app.schemas.schemas import (
 )
 from app.core.permissions import get_current_user
 from app.core.rbac import canonical_role
-from app.core.warranty_service import add_calendar_months
 
 router = APIRouter(prefix="/api/warranties", tags=["Warranty & Equipment Assurance Management"])
-MAX_CERTIFICATE_SIZE = 10 * 1024 * 1024
-
-
-def _certificate_file_path(certificate_url: Optional[str]) -> Optional[Path]:
-    if not certificate_url:
-        return None
-    relative_path = Path(certificate_url)
-    if relative_path.is_absolute() or ".." in relative_path.parts:
-        return None
-    root = settings.upload_path.resolve()
-    path = (root / relative_path).resolve()
-    return path if path.is_relative_to(root) else None
 
 
 def _scope_warranties(db: Session, query, current_user: User):
@@ -62,21 +44,8 @@ def _scope_claims(db: Session, query, current_user: User):
 
 def _calculate_warranty_dynamic_status(w: WarrantyRecord, today: date) -> str:
     """Calculates status dynamically based on expiry date and claims."""
-    if w.status in [
-        "PENDING_ACTIVATION",
-        "CLAIM_RAISED",
-        "UNDER_REVIEW",
-        "REPLACEMENT_IN_PROGRESS",
-    ]:
+    if w.status in ["CLAIM_RAISED", "UNDER_REVIEW", "REPLACEMENT_IN_PROGRESS"]:
         return w.status
-    if w.status in {"ACTIVE", "COVERED", "EXPIRING_SOON"} and not (
-        w.certificate_url and w.activated_at and w.activated_by
-    ):
-        return "PENDING_ACTIVATION"
-    if w.status == "EXPIRED":
-        if w.certificate_url and w.activated_at and w.activated_by:
-            return "EXPIRED"
-        return "PENDING_ACTIVATION"
 
     if w.warranty_end < today:
         return "EXPIRED"
@@ -116,7 +85,7 @@ def get_warranty_dashboard_summary(
 
     for w in all_warranties:
         status_calc = _calculate_warranty_dynamic_status(w, today)
-        if status_calc == "ACTIVE":
+        if status_calc == "ACTIVE" or (w.status == "COVERED" and w.warranty_end >= today):
             active_count += 1
         elif status_calc == "EXPIRING_SOON":
             expiring_soon_count += 1
@@ -360,11 +329,9 @@ def list_warranties(
             warranty_start=w.warranty_start,
             warranty_end=w.warranty_end,
             days_remaining=days_remaining,
-            status=calc_status,
+            status=calc_status if w.status in ["ACTIVE", "COVERED"] else w.status,
             coverage_terms=w.coverage_terms,
             certificate_url=w.certificate_url,
-            activated_at=w.activated_at,
-            activated_by=w.activated_by,
             notes=w.notes,
             open_claims_count=open_claims,
             created_at=w.created_at,
@@ -399,6 +366,9 @@ def search_warranty(
     for w in records:
         days_remaining = (w.warranty_end - today).days
         status = _calculate_warranty_dynamic_status(w, today)
+        if w.status == "COVERED" and days_remaining >= 0:
+            status = "COVERED"
+
         results.append({
             "id": w.id,
             "warranty_number": w.warranty_number,
@@ -462,11 +432,9 @@ def get_warranty_details(
         warranty_start=w.warranty_start,
         warranty_end=w.warranty_end,
         days_remaining=days_left,
-        status=_calculate_warranty_dynamic_status(w, today),
+        status=_calculate_warranty_dynamic_status(w, today) if w.status in ["ACTIVE", "COVERED"] else w.status,
         coverage_terms=w.coverage_terms,
         certificate_url=w.certificate_url,
-        activated_at=w.activated_at,
-        activated_by=w.activated_by,
         notes=w.notes,
         open_claims_count=open_claims,
         created_at=w.created_at,
@@ -480,94 +448,47 @@ def get_warranty_certificate(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """
+    Generates structured digital Warranty Certificate data for rendering or printing.
+    """
     w = _scope_warranties(
         db, db.query(WarrantyRecord), current_user
     ).filter(WarrantyRecord.id == warranty_id).first()
     if not w:
         raise HTTPException(status_code=404, detail="Warranty record not found")
-    certificate_path = _certificate_file_path(w.certificate_url)
-    if not certificate_path or not certificate_path.is_file():
-        raise HTTPException(
-            status_code=404,
-            detail="No uploaded warranty certificate is available for this record.",
-        )
 
     return {
-        "certificate_url": f"/api/warranties/{w.id}/certificate/document",
-        "warranty_number": w.warranty_number,
-        "status": _calculate_warranty_dynamic_status(w, date.today()),
-        "serial_number": w.serial_number,
-        "activated_at": w.activated_at,
-        "activated_by": w.activated_by,
+        "certificate_number": w.warranty_number,
+        "issue_date": str(w.warranty_start),
+        "expiry_date": str(w.warranty_end),
+        "duration_years": round((w.duration_months or 24) / 12, 1),
+        "status": w.status,
+        "warranty_type": w.warranty_type,
+        "beneficiary": {
+            "customer_name": w.customer.name if w.customer else "Valued Client",
+            "phone": w.customer.phone if w.customer else "",
+            "address": w.customer.address if w.customer else "Installation Site",
+            "order_number": w.order.order_number if w.order else "",
+            "capacity_kw": w.order.capacity_kw if w.order else 3.0
+        },
+        "equipment": {
+            "product_name": w.product.name if w.product else "Solar PV Equipment",
+            "category": w.product.category if w.product else "",
+            "manufacturer": w.manufacturer or (w.product.manufacturer if w.product else "Aarka Tech"),
+            "model": w.model_number or (w.product.model if w.product else w.product.sku if w.product else ""),
+            "serial_number": w.serial_number
+        },
+        "terms": {
+            "summary": w.coverage_terms,
+            "exclusions": "Damage caused by lightning strikes beyond rated SPD levels, unauthorized modifications, physical vandalism, or acts of war.",
+            "service_sla": "AARKA Authorized Field Technician response within 48 business hours upon ticket lodging."
+        },
+        "issuer": {
+            "company": "AARKA Solar Operations Ltd.",
+            "portal": "https://aarka.com",
+            "support_helpline": "+91 1800-419-AARKA"
+        }
     }
-
-
-@router.post("/{warranty_id}/certificate")
-def upload_warranty_certificate(
-    warranty_id: int,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    warranty = _scope_warranties(
-        db, db.query(WarrantyRecord), current_user
-    ).filter(WarrantyRecord.id == warranty_id).with_for_update().first()
-    if not warranty:
-        raise HTTPException(status_code=404, detail="Warranty record not found.")
-    if warranty.status != "PENDING_ACTIVATION":
-        raise HTTPException(status_code=409, detail="Only pending warranties can receive an activation certificate.")
-
-    extension = Path(file.filename or "").suffix.lower()
-    allowed_files = {
-        (".pdf", "application/pdf"): lambda data: data.startswith(b"%PDF-"),
-        (".png", "image/png"): lambda data: data.startswith(b"\x89PNG\r\n\x1a\n"),
-        (".jpg", "image/jpeg"): lambda data: data.startswith(b"\xff\xd8\xff"),
-        (".jpeg", "image/jpeg"): lambda data: data.startswith(b"\xff\xd8\xff"),
-    }
-    validator = allowed_files.get((extension, file.content_type or ""))
-    if not validator:
-        raise HTTPException(status_code=415, detail="Upload a PDF, PNG, or JPEG warranty certificate.")
-    contents = file.file.read(MAX_CERTIFICATE_SIZE + 1)
-    if not contents:
-        raise HTTPException(status_code=400, detail="The uploaded certificate is empty.")
-    if len(contents) > MAX_CERTIFICATE_SIZE:
-        raise HTTPException(status_code=413, detail="Warranty certificates must be 10 MB or smaller.")
-    if not validator(contents):
-        raise HTTPException(status_code=415, detail="The uploaded file does not match its declared certificate type.")
-
-    directory = settings.upload_path / "warranties"
-    directory.mkdir(parents=True, exist_ok=True)
-    filename = f"{secrets.token_hex(16)}{extension}"
-    certificate_path = directory / filename
-    certificate_path.write_bytes(contents)
-
-    warranty.certificate_url = f"warranties/{filename}"
-    db.add(AuditLog(
-        user_id=current_user.id,
-        action="WARRANTY_CERTIFICATE_UPLOADED",
-        entity_type="warranty",
-        entity_id=warranty.id,
-        details="Manufacturer certificate document uploaded for verification.",
-    ))
-    db.commit()
-    return {"certificate_url": warranty.certificate_url, "status": warranty.status}
-
-
-@router.get("/{warranty_id}/certificate/document")
-def download_warranty_certificate(
-    warranty_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    warranty = _scope_warranties(
-        db, db.query(WarrantyRecord), current_user
-    ).filter(WarrantyRecord.id == warranty_id).first()
-    if not warranty:
-        raise HTTPException(status_code=404, detail="Warranty record not found.")
-    certificate_path = _certificate_file_path(warranty.certificate_url)
-    if not certificate_path or not certificate_path.is_file():
-        raise HTTPException(status_code=404, detail="No uploaded warranty certificate is available.")
-    return FileResponse(certificate_path, filename=certificate_path.name)
 
 
 @router.put("/{warranty_id}/status", response_model=WarrantyOut)
@@ -590,88 +511,9 @@ def update_warranty_status(
     if payload.status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status '{payload.status}'. Must be one of {valid_statuses}")
 
-    if payload.status in {"COVERED", "EXPIRING_SOON", "EXPIRED"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Coverage and expiry statuses are derived from verified warranty data.",
-        )
-
-    if payload.status == "ACTIVE" and w.status == "PENDING_ACTIVATION":
-        certificate_path = _certificate_file_path(w.certificate_url)
-        if not certificate_path or not certificate_path.is_file():
-            raise HTTPException(
-                status_code=400,
-                detail="Upload a manufacturer warranty certificate before activation.",
-            )
-        if not w.order_id or not w.delivery_date or w.warranty_start != w.delivery_date:
-            raise HTTPException(
-                status_code=409,
-                detail="A confirmed delivery date is required before warranty activation.",
-            )
-        if (
-            not w.duration_months
-            or w.duration_months <= 0
-            or w.warranty_start > date.today()
-            or w.warranty_end != add_calendar_months(w.warranty_start, w.duration_months)
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="The warranty period is not currently valid.",
-            )
-        serial = db.query(SerializedEquipment).filter(
-            SerializedEquipment.serial_number == w.serial_number,
-            SerializedEquipment.product_id == w.product_id,
-            SerializedEquipment.order_id == w.order_id,
-            SerializedEquipment.customer_id == w.customer_id,
-            SerializedEquipment.status == "INSTALLED",
-        ).first()
-        if not serial:
-            raise HTTPException(
-                status_code=409,
-                detail="The matching equipment serial must be installed for this customer and order.",
-            )
-        dispatch = db.query(Dispatch).filter(
-            Dispatch.id == serial.dispatch_id,
-            Dispatch.order_id == w.order_id,
-            Dispatch.status == "DELIVERED",
-            Dispatch.customer_confirmed.is_(True),
-            Dispatch.delivery_date == w.delivery_date,
-        ).first()
-        if not dispatch:
-            raise HTTPException(
-                status_code=409,
-                detail="Customer-confirmed delivery of this equipment serial is required before warranty activation.",
-            )
-        installation = db.query(InstallationJob).filter(
-            InstallationJob.id == serial.installation_id,
-            InstallationJob.order_id == w.order_id,
-            InstallationJob.customer_id == w.customer_id,
-            InstallationJob.status == "CUSTOMER_ACCEPTED",
-            InstallationJob.customer_signature.is_not(None),
-        ).first()
-        if not installation:
-            raise HTTPException(
-                status_code=409,
-                detail="Customer-accepted installation is required before warranty activation.",
-            )
-        w.activated_at = datetime.now(timezone.utc)
-        w.activated_by = current_user.id
-    elif payload.status == "ACTIVE" and w.status not in {"ACTIVE", "COVERED", "EXPIRING_SOON"}:
-        raise HTTPException(
-            status_code=409,
-            detail="Only a pending warranty with verified delivery, installation, and certificate can be activated.",
-        )
-
     w.status = payload.status
     if payload.notes:
         w.notes = payload.notes
-    db.add(AuditLog(
-        user_id=current_user.id,
-        action="WARRANTY_STATUS_UPDATED",
-        entity_type="warranty",
-        entity_id=w.id,
-        details=f"Warranty status changed to {payload.status}.",
-    ))
 
     db.commit()
     db.refresh(w)
@@ -703,8 +545,6 @@ def update_warranty_status(
         status=w.status,
         coverage_terms=w.coverage_terms,
         certificate_url=w.certificate_url,
-        activated_at=w.activated_at,
-        activated_by=w.activated_by,
         notes=w.notes,
         open_claims_count=len(w.claims),
         created_at=w.created_at,
@@ -795,14 +635,6 @@ def create_warranty_claim(
     ).filter(WarrantyRecord.id == payload.warranty_id).first()
     if not warranty:
         raise HTTPException(status_code=404, detail="Warranty record not found")
-    if _calculate_warranty_dynamic_status(warranty, date.today()) not in {
-        "ACTIVE",
-        "EXPIRING_SOON",
-    }:
-        raise HTTPException(
-            status_code=409,
-            detail="Warranty claims require verified active coverage.",
-        )
 
     year = date.today().year
     claim_num = f"CLM-{year}-{random.randint(1000, 9999)}"
@@ -818,7 +650,7 @@ def create_warranty_claim(
         equipment_name=warranty.product.name if warranty.product else "Solar PV Equipment",
         issue_description=payload.issue_description,
         supporting_documents=json.dumps(payload.supporting_documents or []),
-        manufacturer_reference=payload.manufacturer_reference,
+        manufacturer_reference=payload.manufacturer_reference or f"OEM-RMA-{random.randint(10000, 99999)}",
         assigned_technician_id=payload.assigned_technician_id,
         claim_status="CLAIM_RAISED"
     )

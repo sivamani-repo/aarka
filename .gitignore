@@ -6,22 +6,11 @@
 __pycache__/
 *.pyc
 .venv/
-.venv*/
-venv/
 .pytest_cache/
 
 # Frontend
 node_modules/
 dist/
-
-# Local databases and backups
-*.db
-*.sqlite
-*.sqlite3
-*.dump
-*.backup
-*.bak
-*.sql.gz
 
 # Uploads and temporary
 backend/uploads/

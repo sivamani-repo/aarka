@@ -120,13 +120,8 @@ def schedule_survey(
     if payload.technician_id is not None:
         if not has_permission(db, current_user, "surveys", ASSIGN):
             raise HTTPException(status_code=403, detail="Survey assignment permission is required.")
-        technician = db.query(Technician).filter(Technician.id == payload.technician_id).first()
-        if not technician:
+        if not db.query(Technician).filter(Technician.id == payload.technician_id).first():
             raise HTTPException(status_code=404, detail="Technician not found")
-        if technician.status != "ACTIVE":
-            raise HTTPException(status_code=409, detail="The selected technician is inactive.")
-        if technician.availability == "UNAVAILABLE":
-            raise HTTPException(status_code=409, detail="The selected technician is unavailable.")
 
     survey_ref = f"SURV-2026-{random.randint(100, 999)}"
     while db.query(SiteSurvey).filter(SiteSurvey.survey_reference == survey_ref).first():
@@ -247,13 +242,10 @@ def update_survey(
     if payload.technician_id is not None:
         if not has_permission(db, current_user, "surveys", ASSIGN):
             raise HTTPException(status_code=403, detail="Survey assignment permission is required.")
-        technician = db.query(Technician).filter(Technician.id == payload.technician_id).first()
-        if not technician:
+        if not db.query(Technician).filter(Technician.id == payload.technician_id).first():
             raise HTTPException(status_code=404, detail="Technician not found")
-        if technician.status != "ACTIVE":
-            raise HTTPException(status_code=409, detail="The selected technician is inactive.")
-        if technician.availability == "UNAVAILABLE":
-            raise HTTPException(status_code=409, detail="The selected technician is unavailable.")
+    if payload.technician_id is not None and not has_permission(db, current_user, "surveys", ASSIGN):
+        raise HTTPException(status_code=403, detail="Survey assignment permission is required.")
     if payload.technician_id is not None:
         s.technician_id = payload.technician_id
     if payload.actual_survey_date is not None:

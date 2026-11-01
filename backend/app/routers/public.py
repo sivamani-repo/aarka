@@ -1,8 +1,6 @@
 import random
-from datetime import datetime, timezone
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -35,11 +33,14 @@ def submit_public_enquiry(payload: PublicEnquiryRequest, db: Session = Depends(g
             status="ACTIVE"
         )
         db.add(customer)
-        db.flush()
+        db.commit()
+        db.refresh(customer)
     else:
+        # Update details if existing customer makes a new inquiry
         customer.monthly_bill = payload.monthly_electricity_bill
         customer.required_capacity_kw = payload.required_capacity
         customer.solar_requirement = payload.solar_requirement
+        db.commit()
 
     # 2. Generate unique lead reference
     rand_suffix = random.randint(1000, 9999)
@@ -64,27 +65,23 @@ def submit_public_enquiry(payload: PublicEnquiryRequest, db: Session = Depends(g
         solar_requirement=payload.solar_requirement,
         monthly_bill=payload.monthly_electricity_bill,
         subsidy_required=payload.subsidy_requirement,
-        privacy_consent_at=datetime.now(timezone.utc),
         estimated_value=payload.required_capacity * 65000.0,
         stage="NEW",
         status="OPEN",
         notes=payload.additional_requirements or "Inquiry received from public solar inquiry portal."
     )
     db.add(lead)
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=409,
-            detail="The enquiry could not be saved due to a conflicting record. Please try again.",
-        ) from exc
+    db.commit()
     db.refresh(lead)
 
     return {
         "success": True,
         "message": "Thank you! Your solar inquiry has been received. Our sales engineer will contact you shortly.",
         "lead_reference": lead.lead_reference,
+        "customer_id": customer.id,
+        "customer_name": customer.name,
+        "required_capacity_kw": lead.required_capacity_kw,
+        "solar_requirement": lead.solar_requirement
     }
 
 
@@ -92,3 +89,4 @@ def submit_public_enquiry(payload: PublicEnquiryRequest, db: Session = Depends(g
 def list_public_packages(db: Session = Depends(get_db)):
     packages = db.query(Package).order_by(Package.capacity_kw.asc(), Package.package_type.asc()).all()
     return packages
+
